@@ -1,0 +1,94 @@
+// ============================================================
+// Schema de Prisma - Sistema de Gestión de Inventario
+// ============================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================
+// Modelo: Location (Ubicación)
+// Representa una bodega, tienda u otro punto de almacenamiento
+// ============================================================
+model Location {
+  id        String   @id @default(uuid())
+  name      String
+  type      String   // Ej: "bodega", "tienda", "almacen"
+  capacity  Int?     // Capacidad máxima opcional (unidades)
+  createdAt DateTime @default(now())
+
+  // Relaciones
+  stocks    Stock[]
+  movements Movement[]
+
+  @@map("locations")
+}
+
+// ============================================================
+// Modelo: Product (Producto)
+// Representa un artículo del inventario
+// ============================================================
+model Product {
+  id        String   @id @default(uuid())
+  name      String
+  sku       String   @unique // Código único del producto
+  createdAt DateTime @default(now())
+
+  // Relaciones
+  stocks    Stock[]
+  movements Movement[]
+
+  @@map("products")
+}
+
+// ============================================================
+// Modelo: Stock
+// Cantidad actual de un producto en una ubicación específica
+// ============================================================
+model Stock {
+  id         String   @id @default(uuid())
+  productId  String
+  locationId String
+  quantity   Int      @default(0)
+
+  // Relaciones
+  product    Product  @relation(fields: [productId], references: [id])
+  location   Location @relation(fields: [locationId], references: [id])
+
+  // Restricción: solo puede existir un registro por producto+ubicación
+  @@unique([productId, locationId])
+  @@map("stocks")
+}
+
+// ============================================================
+// Modelo: Movement (Movimiento)
+// Registra cada entrada o salida de inventario
+// ============================================================
+model Movement {
+  id         String       @id @default(uuid())
+  productId  String
+  locationId String
+  type       MovementType // "IN" = entrada, "OUT" = salida
+  quantity   Int
+  note       String?      // Nota opcional del movimiento
+  createdAt  DateTime     @default(now())
+
+  // Relaciones
+  product    Product  @relation(fields: [productId], references: [id])
+  location   Location @relation(fields: [locationId], references: [id])
+
+  @@map("movements")
+}
+
+// ============================================================
+// Enum: MovementType
+// ============================================================
+enum MovementType {
+  IN  // Entrada de mercancía
+  OUT // Salida de mercancía
+}
