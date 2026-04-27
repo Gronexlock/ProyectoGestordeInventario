@@ -1,5 +1,4 @@
 import { useState } from "react";
-import type { FormEvent } from "react";
 import type { CreateLocationDto, LocationType } from "../types/location";
 import { createLocation } from "../services/locationService";
 
@@ -29,7 +28,7 @@ export const LocationForm = ({ onSuccess }: LocationFormProps) => {
     }));
   };
 
-  const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setError(null);
     setSuccess(false);
@@ -40,10 +39,8 @@ export const LocationForm = ({ onSuccess }: LocationFormProps) => {
       setSuccess(true);
       setFormData({ name: "", type: "bodega", capacity: undefined });
 
-      // Limpiar mensaje de éxito después de 3 segundos
       setTimeout(() => setSuccess(false), 3000);
 
-      // Llamar callback si existe
       onSuccess?.();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Error desconocido");

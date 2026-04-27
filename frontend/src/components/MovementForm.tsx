@@ -1,6 +1,5 @@
 import { useState, useEffect } from "react";
-import type { FormEvent } from "react";
-import type { CreateMovementDto, MovementType } from "../types/movement";
+import type { CreateMovementDto } from "../types/movement";
 import type { Location } from "../types/location";
 import type { Product } from "../types/product";
 import { createMovement } from "../services/movementService";
@@ -23,7 +22,6 @@ export const MovementForm = () => {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
 
-  // Cargar ubicaciones y productos al montar el componente
   useEffect(() => {
     const fetchData = async () => {
       try {
@@ -33,8 +31,7 @@ export const MovementForm = () => {
         ]);
         setLocations(locsData);
         setProducts(prodsData);
-        
-        // Seleccionar valores por defecto si existen
+
         if (locsData.length > 0 && prodsData.length > 0) {
           setFormData(prev => ({
             ...prev,
@@ -57,7 +54,7 @@ export const MovementForm = () => {
     }));
   };
 
-  const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (e: React.SyntheticEvent<HTMLFormElement>) => {
     e.preventDefault();
     setError(null);
     setSuccess(false);
@@ -67,12 +64,33 @@ export const MovementForm = () => {
       return;
     }
 
+    if (formData.type === "IN") {
+      const selectedLocation = locations.find(l => l.id === formData.locationId);
+      
+      if (selectedLocation && selectedLocation.capacity) {
+        
+        const currentStock = selectedLocation.stocks?.reduce((total, stock) => total + stock.quantity, 0) || 0;
+        const newTotalStock = currentStock + formData.quantity;
+        
+        if (newTotalStock > selectedLocation.capacity) {
+          const errMsg = `Error: La ubicación "${selectedLocation.name}" tiene capacidad para ${selectedLocation.capacity} unidades. Estás intentando agregar ${formData.quantity}.`;
+          console.error(errMsg); 
+          setError(errMsg); 
+          return; 
+        }
+      }
+    }
+
     setLoading(true);
 
     try {
       await createMovement(formData);
       setSuccess(true);
-      setFormData(prev => ({ ...prev, quantity: 1, note: "" })); // Dejar producto y ubicación seleccionados, reiniciar resto
+      
+      const updatedLocs = await getAllLocations();
+      setLocations(updatedLocs);
+      
+      setFormData(prev => ({ ...prev, quantity: 1, note: "" })); 
       setTimeout(() => setSuccess(false), 3000);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Error desconocido");
@@ -95,7 +113,6 @@ export const MovementForm = () => {
         </div>
       )}
 
-      {/* Producto */}
       <div style={{ marginBottom: "15px" }}>
         <label htmlFor="productId" style={{ display: "block", marginBottom: "5px", fontWeight: "500" }}>
           Producto <span style={{ color: "red" }}>*</span>
@@ -115,7 +132,6 @@ export const MovementForm = () => {
         </select>
       </div>
 
-      {/* Ubicación */}
       <div style={{ marginBottom: "15px" }}>
         <label htmlFor="locationId" style={{ display: "block", marginBottom: "5px", fontWeight: "500" }}>
           Ubicación <span style={{ color: "red" }}>*</span>
@@ -135,7 +151,6 @@ export const MovementForm = () => {
         </select>
       </div>
 
-      {/* Tipo de Movimiento */}
       <div style={{ marginBottom: "15px" }}>
         <label htmlFor="type" style={{ display: "block", marginBottom: "5px", fontWeight: "500" }}>
           Tipo de Movimiento <span style={{ color: "red" }}>*</span>
@@ -153,7 +168,6 @@ export const MovementForm = () => {
         </select>
       </div>
 
-      {/* Cantidad */}
       <div style={{ marginBottom: "15px" }}>
         <label htmlFor="quantity" style={{ display: "block", marginBottom: "5px", fontWeight: "500" }}>
           Cantidad <span style={{ color: "red" }}>*</span>
@@ -170,7 +184,6 @@ export const MovementForm = () => {
         />
       </div>
 
-      {/* Nota */}
       <div style={{ marginBottom: "15px" }}>
         <label htmlFor="note" style={{ display: "block", marginBottom: "5px", fontWeight: "500" }}>
           Nota (opcional)

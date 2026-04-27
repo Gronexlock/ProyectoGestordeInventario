@@ -1,10 +1,10 @@
-// Tipos para Location
 export interface Location {
   id: string;
   name: string;
   type: string;
   capacity?: number;
   createdAt: string;
+  stocks?: { quantity: number; productId: string }[];
 }
 
 export interface CreateLocationDto {
