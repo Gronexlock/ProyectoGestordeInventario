@@ -31,7 +31,7 @@ export const MovementForm = () => {
         ]);
         setLocations(locsData);
         setProducts(prodsData);
-
+        
         if (locsData.length > 0 && prodsData.length > 0) {
           setFormData(prev => ({
             ...prev,
@@ -40,7 +40,7 @@ export const MovementForm = () => {
           }));
         }
       } catch (err) {
-        console.error("Error cargando dependencias", err);
+        console.error(err);
       }
     };
     fetchData();
@@ -64,19 +64,19 @@ export const MovementForm = () => {
       return;
     }
 
+    
     if (formData.type === "IN") {
       const selectedLocation = locations.find(l => l.id === formData.locationId);
       
       if (selectedLocation && selectedLocation.capacity) {
-        
         const currentStock = selectedLocation.stocks?.reduce((total, stock) => total + stock.quantity, 0) || 0;
         const newTotalStock = currentStock + formData.quantity;
         
         if (newTotalStock > selectedLocation.capacity) {
           const errMsg = `Error: La ubicación "${selectedLocation.name}" tiene capacidad para ${selectedLocation.capacity} unidades. Estás intentando agregar ${formData.quantity}.`;
-          console.error(errMsg); 
-          setError(errMsg); 
-          return; 
+          console.error(errMsg);
+          setError(errMsg);
+          return;
         }
       }
     }
@@ -86,11 +86,10 @@ export const MovementForm = () => {
     try {
       await createMovement(formData);
       setSuccess(true);
-      
       const updatedLocs = await getAllLocations();
       setLocations(updatedLocs);
       
-      setFormData(prev => ({ ...prev, quantity: 1, note: "" })); 
+      setFormData(prev => ({ ...prev, quantity: 1, note: "" }));
       setTimeout(() => setSuccess(false), 3000);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Error desconocido");
@@ -113,6 +112,7 @@ export const MovementForm = () => {
         </div>
       )}
 
+      {/* Producto */}
       <div style={{ marginBottom: "15px" }}>
         <label htmlFor="productId" style={{ display: "block", marginBottom: "5px", fontWeight: "500" }}>
           Producto <span style={{ color: "red" }}>*</span>
@@ -132,6 +132,7 @@ export const MovementForm = () => {
         </select>
       </div>
 
+      {/* Ubicación */}
       <div style={{ marginBottom: "15px" }}>
         <label htmlFor="locationId" style={{ display: "block", marginBottom: "5px", fontWeight: "500" }}>
           Ubicación <span style={{ color: "red" }}>*</span>
@@ -151,6 +152,7 @@ export const MovementForm = () => {
         </select>
       </div>
 
+      {/* Tipo de Movimiento */}
       <div style={{ marginBottom: "15px" }}>
         <label htmlFor="type" style={{ display: "block", marginBottom: "5px", fontWeight: "500" }}>
           Tipo de Movimiento <span style={{ color: "red" }}>*</span>
@@ -168,6 +170,7 @@ export const MovementForm = () => {
         </select>
       </div>
 
+      {/* Cantidad */}
       <div style={{ marginBottom: "15px" }}>
         <label htmlFor="quantity" style={{ display: "block", marginBottom: "5px", fontWeight: "500" }}>
           Cantidad <span style={{ color: "red" }}>*</span>
@@ -184,6 +187,7 @@ export const MovementForm = () => {
         />
       </div>
 
+      {/* Nota */}
       <div style={{ marginBottom: "15px" }}>
         <label htmlFor="note" style={{ display: "block", marginBottom: "5px", fontWeight: "500" }}>
           Nota (opcional)
