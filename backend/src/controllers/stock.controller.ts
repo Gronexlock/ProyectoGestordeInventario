@@ -35,7 +35,7 @@ export const getStockByLocation = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const { locationId } = req.params;
+    const locationId = req.params.locationId as string;
     const result = await stockService.getStockByLocation(locationId);
 
     sendSuccess(

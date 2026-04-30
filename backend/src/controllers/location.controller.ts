@@ -6,7 +6,7 @@
 import { Request, Response, NextFunction } from "express";
 import * as locationService from "../services/location.service";
 import { sendSuccess } from "../utils/response";
-import { CreateLocationDto } from "../utils/types";
+import { CreateLocationDto, UpdateLocationDto } from "../utils/types";
 
 /**
  * POST /locations
@@ -45,6 +45,69 @@ export const getLocations = async (
     const locations = await locationService.getAllLocations();
 
     sendSuccess(res, locations, `Se encontraron ${locations.length} ubicaciones.`);
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * GET /locations/:id
+ * Retorna una ubicación específica con su stock
+ */
+export const getLocationById = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const id = req.params.id as string;
+    const location = await locationService.getLocationById(id);
+
+    sendSuccess(res, location, `Ubicación "${location.name}" encontrada.`);
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * PUT /locations/:id
+ * Actualiza los datos de una ubicación existente
+ */
+export const updateLocation = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const id = req.params.id as string;
+    const dto: UpdateLocationDto = {
+      name: req.body.name,
+      type: req.body.type,
+      capacity: req.body.capacity,
+    };
+
+    const updated = await locationService.updateLocation(id, dto);
+
+    sendSuccess(res, updated, `Ubicación "${updated.name}" actualizada exitosamente.`);
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * DELETE /locations/:id
+ * Elimina una ubicación (solo si no tiene stock asociado)
+ */
+export const deleteLocation = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const id = req.params.id as string;
+    const deleted = await locationService.deleteLocation(id);
+
+    sendSuccess(res, deleted, `Ubicación "${deleted.name}" eliminada exitosamente.`);
   } catch (error) {
     next(error);
   }
