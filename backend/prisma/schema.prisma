@@ -21,10 +21,13 @@ model Location {
   type      String   // Ej: "bodega", "tienda", "almacen"
   capacity  Int?     // Capacidad máxima opcional (unidades)
   createdAt DateTime @default(now())
+  dispatchStart String @default("8:00")
+  dispatchEnd String @default("18:00")
 
   // Relaciones
   stocks    Stock[]
   movements Movement[]
+  reservations Reservation[]
 
   @@map("locations")
 }
@@ -91,4 +94,35 @@ model Movement {
 enum MovementType {
   IN  // Entrada de mercancía
   OUT // Salida de mercancía
+}
+
+model Reservation {
+  reservationId Int @id @default(autoincrement())
+  orderId Int
+  sku String
+  locationId String
+  quantity Int
+  createdAt DateTime @default(now())
+  expiresAt DateTime
+
+  location Location @relation(fields: [locationId], references: [id])
+}
+
+enum Priority {
+  LOW
+  NORMAL
+  HIGH
+  CRITICAL
+}
+
+model DispatchSchedule {
+  scheduleId Int @id @default(autoincrement())
+  orderId Int
+  scheduleDate DateTime
+  startTime String
+  endTime String
+  status String
+  priority String @default("NORMAL")
+  createdAt DateTime @default(now())
+
 }
