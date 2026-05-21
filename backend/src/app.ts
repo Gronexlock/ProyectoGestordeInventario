@@ -12,6 +12,10 @@ import locationRoutes from "./routes/location.routes";
 import productRoutes from "./routes/product.routes";
 import stockRoutes from "./routes/stock.routes";
 import movementRoutes from "./routes/movement.routes";
+import reservationRoutes, {
+  releaseReservationRouter,
+} from "./routes/reservation.routes";
+import externalRoutes from "./routes/external.routes";
 
 // Importar middleware de errores (siempre al final)
 import { errorHandler } from "./middlewares/errorHandler";
@@ -34,6 +38,9 @@ app.get("/", (_req: Request, res: Response) => {
       products: "/api/v1/products",
       stock: "/api/v1/stock",
       movements: "/api/v1/movements",
+      reservations: "/api/v1/reservations",
+      releaseReservation: "/api/v1/release-reservation",
+      confirmDelivery: "/api/v1/external/reservations/:id/confirm-delivery",
     },
     timestamp: new Date().toISOString(),
   });
@@ -50,6 +57,9 @@ app.use(`${API_PREFIX}/locations`, locationRoutes);
 app.use(`${API_PREFIX}/products`, productRoutes);
 app.use(`${API_PREFIX}/stock`, stockRoutes);
 app.use(`${API_PREFIX}/movements`, movementRoutes);
+app.use(`${API_PREFIX}/reservations`, reservationRoutes);
+app.use(`${API_PREFIX}/release-reservation`, releaseReservationRouter);
+app.use(`${API_PREFIX}/external`, externalRoutes);
 
 // ── Ruta no encontrada (404) ────────────────────────────────────
 app.use((_req: Request, res: Response) => {

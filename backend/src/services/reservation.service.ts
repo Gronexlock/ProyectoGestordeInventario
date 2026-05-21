@@ -1,0 +1,330 @@
+// ============================================================
+// Servicio: Reservations (Reservas de Stock)
+// SCRUM-20: cancelación + liberación en un paso
+// SCRUM-33: confirmación de entrega → estado SOLD + movimiento OUT
+// ============================================================
+
+import { ReservationStatus, MovementType } from "@prisma/client";
+import prisma from "../prisma/client";
+import { AppError } from "../utils/AppError";
+import { config } from "../config/config";
+import {
+  CreateReservationDto,
+  ConfirmDeliveryDto,
+  ReleaseReservationDto,
+} from "../utils/types";
+
+/**
+ * Suma de unidades reservadas activas para un SKU en una ubicación.
+ */
+export const getActiveReservedQuantity = async (
+  sku: string,
+  locationId: string
+): Promise<number> => {
+  const result = await prisma.reservation.aggregate({
+    where: { sku, locationId, status: ReservationStatus.ACTIVE },
+    _sum: { quantity: true },
+  });
+
+  return result._sum.quantity ?? 0;
+};
+
+/**
+ * Calcula stock disponible = quantity físico − reservas ACTIVE.
+ */
+export const getStockDisponible = async (
+  sku: string,
+  locationId: string
+): Promise<{ quantity: number; reserved: number; stockDisponible: number }> => {
+  const product = await prisma.product.findUnique({ where: { sku } });
+
+  if (!product) {
+    return { quantity: 0, reserved: 0, stockDisponible: 0 };
+  }
+
+  const stock = await prisma.stock.findUnique({
+    where: {
+      productId_locationId: { productId: product.id, locationId },
+    },
+  });
+
+  const quantity = stock?.quantity ?? 0;
+  const reserved = await getActiveReservedQuantity(sku, locationId);
+
+  return {
+    quantity,
+    reserved,
+    stockDisponible: quantity - reserved,
+  };
+};
+
+/**
+ * Mock Proyecto 3 — crea reserva bloqueando stock disponible (no quantity físico).
+ */
+export const createReservation = async (dto: CreateReservationDto) => {
+  const [product, location] = await Promise.all([
+    prisma.product.findUnique({ where: { sku: dto.sku } }),
+    prisma.location.findUnique({ where: { id: dto.locationId } }),
+  ]);
+
+  if (!product) {
+    throw new AppError(`No se encontró un producto con SKU "${dto.sku}".`, 404);
+  }
+
+  if (!location) {
+    throw new AppError(
+      `No se encontró una ubicación con ID "${dto.locationId}".`,
+      404
+    );
+  }
+
+  if (dto.quantity <= 0) {
+    throw new AppError("La cantidad debe ser mayor a cero.", 400);
+  }
+
+  const { stockDisponible } = await getStockDisponible(dto.sku, dto.locationId);
+
+  if (dto.quantity > stockDisponible) {
+    throw new AppError(
+      `Stock disponible insuficiente. Disponible: ${stockDisponible}, solicitado: ${dto.quantity}.`,
+      400
+    );
+  }
+
+  const expiresAt = dto.expiresAt
+    ? new Date(dto.expiresAt)
+    : new Date(Date.now() + 24 * 60 * 60 * 1000);
+
+  const reservation = await prisma.reservation.create({
+    data: {
+      orderId: dto.orderId,
+      sku: dto.sku,
+      locationId: dto.locationId,
+      quantity: dto.quantity,
+      expiresAt,
+      status: ReservationStatus.ACTIVE,
+    },
+    include: {
+      location: { select: { id: true, name: true, type: true } },
+    },
+  });
+
+  const availability = await getStockDisponible(dto.sku, dto.locationId);
+
+  return { reservation, ...availability };
+};
+
+/**
+ * Lista reservas con filtro opcional por estado.
+ */
+export const getAllReservations = async (status?: ReservationStatus) => {
+  return prisma.reservation.findMany({
+    where: status ? { status } : undefined,
+    orderBy: { createdAt: "desc" },
+    include: {
+      location: { select: { id: true, name: true, type: true } },
+    },
+  });
+};
+
+/**
+ * SCRUM-20 / SCRUM-57–60: cancelación + liberación en un solo paso.
+ * ACTIVE → RELEASED (restaura stock disponible sin tocar quantity físico).
+ */
+export const cancelAndReleaseReservation = async (
+  dto: ReleaseReservationDto
+) => {
+  const reservation = await prisma.reservation.findUnique({
+    where: { reservationId: dto.reservationId },
+    include: {
+      location: { select: { id: true, name: true } },
+    },
+  });
+
+  if (!reservation) {
+    throw new AppError(
+      `No se encontró una reserva con ID ${dto.reservationId}.`,
+      404
+    );
+  }
+
+  if (reservation.status === ReservationStatus.RELEASED) {
+    const availability = await getStockDisponible(
+      reservation.sku,
+      reservation.locationId
+    );
+    return { reservation, ...availability, alreadyReleased: true };
+  }
+
+  if (reservation.status === ReservationStatus.SOLD) {
+    throw new AppError(
+      "No se puede liberar una reserva ya vendida (entrega confirmada).",
+      400
+    );
+  }
+
+  if (reservation.status !== ReservationStatus.ACTIVE) {
+    throw new AppError(
+      `La reserva no puede liberarse en estado "${reservation.status}".`,
+      400
+    );
+  }
+
+  const updated = await prisma.reservation.update({
+    where: { reservationId: dto.reservationId },
+    data: {
+      status: ReservationStatus.RELEASED,
+      releasedAt: new Date(),
+    },
+    include: {
+      location: { select: { id: true, name: true } },
+    },
+  });
+
+  const availability = await getStockDisponible(
+    updated.sku,
+    updated.locationId
+  );
+
+  return { reservation: updated, ...availability, alreadyReleased: false };
+};
+
+/**
+ * SCRUM-33: Proyecto 2 confirma entrega → SOLD + movimiento OUT + descuento físico.
+ */
+export const confirmDelivery = async (
+  reservationId: number,
+  dto?: ConfirmDeliveryDto
+) => {
+  const reservation = await prisma.reservation.findUnique({
+    where: { reservationId },
+    include: {
+      location: { select: { id: true, name: true } },
+    },
+  });
+
+  if (!reservation) {
+    throw new AppError(
+      `No se encontró una reserva con ID ${reservationId}.`,
+      404
+    );
+  }
+
+  if (reservation.status === ReservationStatus.SOLD) {
+    const movement = await prisma.movement.findFirst({
+      where: { reservationId },
+      orderBy: { createdAt: "desc" },
+    });
+    return { reservation, movement, alreadySold: true };
+  }
+
+  if (reservation.status !== ReservationStatus.ACTIVE) {
+    throw new AppError(
+      `Solo se puede confirmar entrega de reservas ACTIVE. Estado actual: "${reservation.status}".`,
+      400
+    );
+  }
+
+  const product = await prisma.product.findUnique({
+    where: { sku: reservation.sku },
+  });
+
+  if (!product) {
+    throw new AppError(
+      `No se encontró el producto con SKU "${reservation.sku}".`,
+      404
+    );
+  }
+
+  const result = await prisma.$transaction(async (tx) => {
+    const existingStock = await tx.stock.findUnique({
+      where: {
+        productId_locationId: {
+          productId: product.id,
+          locationId: reservation.locationId,
+        },
+      },
+    });
+
+    const currentQuantity = existingStock?.quantity ?? 0;
+
+    if (currentQuantity < reservation.quantity) {
+      throw new AppError(
+        `Stock físico insuficiente. Actual: ${currentQuantity}, requerido: ${reservation.quantity}.`,
+        400
+      );
+    }
+
+    const newQuantity = currentQuantity - reservation.quantity;
+
+    const updatedStock = await tx.stock.upsert({
+      where: {
+        productId_locationId: {
+          productId: product.id,
+          locationId: reservation.locationId,
+        },
+      },
+      create: {
+        productId: product.id,
+        locationId: reservation.locationId,
+        quantity: newQuantity,
+      },
+      update: { quantity: newQuantity },
+    });
+
+    const soldAt = dto?.deliveredAt ? new Date(dto.deliveredAt) : new Date();
+
+    const movement = await tx.movement.create({
+      data: {
+        productId: product.id,
+        locationId: reservation.locationId,
+        type: MovementType.OUT,
+        quantity: reservation.quantity,
+        reservationId: reservation.reservationId,
+        note:
+          dto?.note ??
+          `Venta confirmada — Pedido #${reservation.orderId}, Reserva #${reservation.reservationId}`,
+      },
+    });
+
+    const updatedReservation = await tx.reservation.update({
+      where: { reservationId },
+      data: {
+        status: ReservationStatus.SOLD,
+        soldAt,
+      },
+      include: {
+        location: { select: { id: true, name: true } },
+      },
+    });
+
+    return { reservation: updatedReservation, movement, updatedStock, newQuantity };
+  });
+
+  let alert: string | undefined;
+
+  if (result.newQuantity <= config.criticalStockThreshold) {
+    alert =
+      `⚠️ STOCK CRÍTICO: "${product.name}" (SKU: ${product.sku}) ` +
+      `en "${reservation.location.name}" tiene solo ${result.newQuantity} unidades.`;
+
+    console.warn(`\n⚠️  ALERTA DE STOCK CRÍTICO (venta confirmada)`);
+    console.warn(`   Producto:  ${product.name} (${product.sku})`);
+    console.warn(`   Ubicación: ${reservation.location.name}`);
+    console.warn(`   Stock:     ${result.newQuantity} unidades\n`);
+  }
+
+  const availability = await getStockDisponible(
+    reservation.sku,
+    reservation.locationId
+  );
+
+  return {
+    reservation: result.reservation,
+    movement: result.movement,
+    updatedStock: result.updatedStock,
+    ...availability,
+    alert,
+    alreadySold: false,
+  };
+};
