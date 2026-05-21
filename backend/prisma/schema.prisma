@@ -73,13 +73,14 @@ model Stock {
 // Registra cada entrada o salida de inventario
 // ============================================================
 model Movement {
-  id         String       @id @default(uuid())
-  productId  String
-  locationId String
-  type       MovementType // "IN" = entrada, "OUT" = salida
-  quantity   Int
-  note       String?      // Nota opcional del movimiento
-  createdAt  DateTime     @default(now())
+  id            String       @id @default(uuid())
+  productId     String
+  locationId    String
+  type          MovementType // "IN" = entrada, "OUT" = salida
+  quantity      Int
+  note          String?      // Nota opcional del movimiento
+  reservationId Int?         // Vincula venta confirmada con reserva (SCRUM-33)
+  createdAt     DateTime     @default(now())
 
   // Relaciones
   product    Product  @relation(fields: [productId], references: [id])
@@ -96,14 +97,24 @@ enum MovementType {
   OUT // Salida de mercancía
 }
 
+enum ReservationStatus {
+  ACTIVE   // Bloquea stock disponible
+  RELEASED // Cancelada y liberada (stock disponible restaurado)
+  SOLD     // Entrega confirmada por Proyecto 2 — stock físico descontado
+  EXPIRED  // Reserva vencida (TTL) — pendiente de job automático
+}
+
 model Reservation {
-  reservationId Int @id @default(autoincrement())
-  orderId Int
-  sku String
-  locationId String
-  quantity Int
-  createdAt DateTime @default(now())
-  expiresAt DateTime
+  reservationId Int               @id @default(autoincrement())
+  orderId       Int
+  sku           String
+  locationId    String
+  quantity      Int
+  status        ReservationStatus @default(ACTIVE)
+  createdAt     DateTime          @default(now())
+  expiresAt     DateTime
+  releasedAt    DateTime?
+  soldAt        DateTime?
 
   location Location @relation(fields: [locationId], references: [id])
 }

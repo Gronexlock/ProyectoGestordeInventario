@@ -47,6 +47,7 @@ export interface MovementResult {
     type: string;
     quantity: number;
     note?: string | null;
+    reservationId?: number | null;
     createdAt: Date;
   };
   updatedStock: {
@@ -56,4 +57,22 @@ export interface MovementResult {
     quantity: number;
   };
   alert?: string;
+}
+
+// ── DTOs de Reserva ──────────────────────────────────────────────
+export interface CreateReservationDto {
+  orderId: number;
+  sku: string;
+  locationId: string;
+  quantity: number;
+  expiresAt?: string;
+}
+
+export interface ReleaseReservationDto {
+  reservationId: number;
+}
+
+export interface ConfirmDeliveryDto {
+  deliveredAt?: string;
+  note?: string;
 }

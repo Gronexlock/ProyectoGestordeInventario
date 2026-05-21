@@ -5,7 +5,7 @@
 // Ejecución: npm run db:seed
 // ============================================================
 
-import { PrismaClient, MovementType } from "@prisma/client";
+import { PrismaClient, MovementType, ReservationStatus } from "@prisma/client";
 
 const prisma = new PrismaClient();
 
@@ -13,6 +13,8 @@ async function main() {
   console.log("🌱 Iniciando seed de base de datos...\n");
 
   // ── Limpiar datos existentes (orden inverso por FK) ─────────────
+  await prisma.reservation.deleteMany();
+  await prisma.dispatchSchedule.deleteMany();
   await prisma.movement.deleteMany();
   await prisma.stock.deleteMany();
   await prisma.product.deleteMany();
@@ -119,12 +121,39 @@ async function main() {
 
   console.log("✅ Movimientos iniciales creados.");
 
+  // ── 5. Crear Reservas de Prueba (mock Proyecto 3) ───────────────
+  const expiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000);
+
+  await prisma.reservation.createMany({
+    data: [
+      {
+        orderId: 1001,
+        sku: laptop.sku,
+        locationId: tiendaNorte.id,
+        quantity: 2,
+        status: ReservationStatus.ACTIVE,
+        expiresAt,
+      },
+      {
+        orderId: 1002,
+        sku: mouse.sku,
+        locationId: bodegaCentral.id,
+        quantity: 10,
+        status: ReservationStatus.ACTIVE,
+        expiresAt,
+      },
+    ],
+  });
+
+  console.log("✅ Reservas de prueba creadas (2 ACTIVE).");
+
   // ── Resumen ──────────────────────────────────────────────────────
   console.log("\n📊 Resumen del seed:");
   console.log(`   📍 Ubicaciones: 2`);
   console.log(`   📦 Productos:   2`);
   console.log(`   📊 Registros de stock: 4`);
   console.log(`   🔄 Movimientos: 4`);
+  console.log(`   🔒 Reservas:    2 (ACTIVE)`);
   console.log("\n🎉 Seed completado exitosamente!\n");
 }
 
