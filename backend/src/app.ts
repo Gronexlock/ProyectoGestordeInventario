@@ -3,9 +3,11 @@
 // Registra middlewares globales y todas las rutas de la API
 // ============================================================
 
-import express, { Request, Response } from "express";
+import express, { Application, Request, Response } from "express";
 import cors from "cors";
 import morgan from "morgan";
+import swaggerUi from "swagger-ui-express";
+import { swaggerSpec } from "./config/swagger";
 
 // Importar rutas
 import locationRoutes from "./routes/location.routes";
@@ -21,7 +23,7 @@ import orderRoutes from "./routes/order.routes";
 // Importar middleware de errores (siempre al final)
 import { errorHandler } from "./middlewares/errorHandler";
 
-const app = express();
+const app: Application = express();
 
 // ── Middlewares Globales ────────────────────────────────────────
 app.use(cors());                                    // Habilitar CORS
@@ -63,6 +65,9 @@ app.use(`${API_PREFIX}/reservations`, reservationRoutes);
 app.use(`${API_PREFIX}/release-reservation`, releaseReservationRouter);
 app.use(`${API_PREFIX}/external`, externalRoutes);
 app.use(`${API_PREFIX}/orders`, orderRoutes);
+
+// ── Documentación Swagger UI ────────────────────────────────────
+app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
 // ── Ruta no encontrada (404) ────────────────────────────────────
 app.use((_req: Request, res: Response) => {

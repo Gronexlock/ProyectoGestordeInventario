@@ -20,10 +20,14 @@
       "Bash(dir /s /b src)",
       "Bash(not exist *)",
       "Bash(Get-ChildItem -Recurse \"c:\\\\Users\\\\adria\\\\Downloads\\\\ProyectoGestordeInventario\\\\backend\\\\src\\\\middlewares\" -Filter \"*auth*\" -ErrorAction SilentlyContinue)",
-      "Bash(git stash *)"
+      "Bash(git stash *)",
+      "Bash(mkdir -p \"/c/Users/adria/Downloads/ProyectoGestordeInventario/backend/docs/proposals\")",
+      "Bash(mkdir -p \"/c/Users/adria/Downloads/ProyectoGestordeInventario/backend/docs/implementation-plans\")"
     ],
     "additionalDirectories": [
-      "c:\\Users\\adria\\Downloads\\ProyectoGestordeInventario\\backend\\docs"
+      "c:\\Users\\adria\\Downloads\\ProyectoGestordeInventario\\backend\\docs",
+      "C:\\Users\\adria\\Downloads\\ProyectoGestordeInventario\\backend\\docs\\proposals",
+      "C:\\Users\\adria\\Downloads\\ProyectoGestordeInventario\\backend\\docs\\implementation-plans"
     ]
   }
 }
