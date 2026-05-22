@@ -102,6 +102,7 @@ model Reservation {
   sku String
   locationId String
   quantity Int
+  status String @default("PENDING") // PENDING, CONFIRMED, CANCELLED
   createdAt DateTime @default(now())
   expiresAt DateTime
 

@@ -7,7 +7,7 @@
 import { Router } from "express";
 import * as stockController from "../controllers/stock.controller";
 
-const router = Router();
+const router: Router = Router();
 
 // ── Rutas ─────────────────────────────────────────────────────────
 router.get("/", stockController.getAllStock);

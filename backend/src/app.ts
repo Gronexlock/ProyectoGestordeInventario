@@ -12,11 +12,12 @@ import locationRoutes from "./routes/location.routes";
 import productRoutes from "./routes/product.routes";
 import stockRoutes from "./routes/stock.routes";
 import movementRoutes from "./routes/movement.routes";
+import reservationRoutes from "./routes/reservation.routes";
 
-// Importar middleware de errores (siempre al final)
+// Importar middleware de errores (siempre al final)zr
 import { errorHandler } from "./middlewares/errorHandler";
 
-const app = express();
+const app: express.Application = express();
 
 // ── Middlewares Globales ────────────────────────────────────────
 app.use(cors());                                    // Habilitar CORS
@@ -50,6 +51,7 @@ app.use(`${API_PREFIX}/locations`, locationRoutes);
 app.use(`${API_PREFIX}/products`, productRoutes);
 app.use(`${API_PREFIX}/stock`, stockRoutes);
 app.use(`${API_PREFIX}/movements`, movementRoutes);
+app.use(`${API_PREFIX}/reservations`, reservationRoutes);
 
 // ── Ruta no encontrada (404) ────────────────────────────────────
 app.use((_req: Request, res: Response) => {

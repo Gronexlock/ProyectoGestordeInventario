@@ -12,7 +12,7 @@ import { body, param } from "express-validator";
 import * as locationController from "../controllers/location.controller";
 import { validateRequest } from "../middlewares/validateRequest";
 
-const router = Router();
+const router: Router = Router();
 
 // ── Validaciones reutilizables ────────────────────────────────────
 

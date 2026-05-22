@@ -9,7 +9,7 @@ import { body } from "express-validator";
 import * as productController from "../controllers/product.controller";
 import { validateRequest } from "../middlewares/validateRequest";
 
-const router = Router();
+const router: Router = Router();
 
 /**
  * Reglas de validación para crear un producto
