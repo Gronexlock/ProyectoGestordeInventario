@@ -16,7 +16,11 @@
       "Read(//c/Program Files/**)",
       "Bash(Get-Content src/services/order.service.ts)",
       "Bash(Get-Content src/controllers/order.controller.ts)",
-      "Bash(Get-Content src/routes/order.routes.ts)"
+      "Bash(Get-Content src/routes/order.routes.ts)",
+      "Bash(dir /s /b src)",
+      "Bash(not exist *)",
+      "Bash(Get-ChildItem -Recurse \"c:\\\\Users\\\\adria\\\\Downloads\\\\ProyectoGestordeInventario\\\\backend\\\\src\\\\middlewares\" -Filter \"*auth*\" -ErrorAction SilentlyContinue)",
+      "Bash(git stash *)"
     ],
     "additionalDirectories": [
       "c:\\Users\\adria\\Downloads\\ProyectoGestordeInventario\\backend\\docs"

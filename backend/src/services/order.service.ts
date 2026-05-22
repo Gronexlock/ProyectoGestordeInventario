@@ -74,6 +74,50 @@ export const createOrder = async (dto: CreateOrderDto) => {
 };
 
 /**
+ * Retorna pedidos en estado READY_FOR_DISPATCH con filtros opcionales.
+ * Valida existencia de locationId y coherencia del rango de fechas antes de consultar.
+ */
+export const getReadyForDispatch = async (filters: {
+  locationId?: string;
+  dateFrom?: string;
+  dateTo?: string;
+}) => {
+  const { locationId, dateFrom, dateTo } = filters;
+
+  if (locationId) {
+    const location = await prisma.location.findUnique({ where: { id: locationId } });
+    if (!location) {
+      throw new AppError(`No se encontró una ubicación con ID "${locationId}".`, 404);
+    }
+  }
+
+  if (dateFrom && dateTo && new Date(dateFrom) > new Date(dateTo)) {
+    throw new AppError("El parámetro dateFrom no puede ser posterior a dateTo.", 400);
+  }
+
+  let createdAtFilter: { gte?: Date; lte?: Date } | undefined;
+  if (dateFrom || dateTo) {
+    createdAtFilter = {};
+    if (dateFrom) createdAtFilter.gte = new Date(dateFrom);
+    if (dateTo) {
+      const toDate = new Date(dateTo);
+      toDate.setUTCHours(23, 59, 59, 999);
+      createdAtFilter.lte = toDate;
+    }
+  }
+
+  return prisma.order.findMany({
+    where: {
+      status: OrderStatus.READY_FOR_DISPATCH,
+      ...(locationId && { items: { some: { locationId } } }),
+      ...(createdAtFilter && { createdAt: createdAtFilter }),
+    },
+    orderBy: { createdAt: "desc" },
+    include: ORDER_INCLUDE,
+  });
+};
+
+/**
  * Retorna todos los pedidos con sus ítems.
  */
 export const getAllOrders = async () => {

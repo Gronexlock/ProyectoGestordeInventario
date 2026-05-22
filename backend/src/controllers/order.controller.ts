@@ -32,6 +32,29 @@ export const createOrder = async (
 };
 
 /**
+ * GET /orders/ready-for-dispatch
+ * Retorna pedidos en estado READY_FOR_DISPATCH.
+ * Query params opcionales: locationId, dateFrom, dateTo
+ */
+export const getReadyForDispatch = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const orders = await orderService.getReadyForDispatch({
+      locationId: typeof req.query.locationId === "string" ? req.query.locationId : undefined,
+      dateFrom: typeof req.query.dateFrom === "string" ? req.query.dateFrom : undefined,
+      dateTo: typeof req.query.dateTo === "string" ? req.query.dateTo : undefined,
+    });
+
+    sendSuccess(res, orders, `Se encontraron ${orders.length} pedidos listos para despacho.`);
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
  * GET /orders
  * Lista todos los pedidos con sus ítems.
  */
