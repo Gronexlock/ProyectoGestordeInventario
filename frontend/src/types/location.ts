@@ -4,7 +4,11 @@ export interface Location {
   type: string;
   capacity?: number;
   createdAt: string;
-  stocks?: { quantity: number; productId: string }[];
+  stocks?: { 
+    quantity: number; 
+    productId: string; 
+    product?: { id: string; name: string; sku: string }; 
+  }[];
 }
 
 export interface CreateLocationDto {

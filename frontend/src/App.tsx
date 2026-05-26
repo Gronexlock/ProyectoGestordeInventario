@@ -1,18 +1,17 @@
-import { BrowserRouter, Link } from "react-router-dom";
+
+import { BrowserRouter } from "react-router-dom";
 import { AppRouter } from "./routes";
+import { Sidebar } from "./components/Sidebar";
+import "./index.css";
 
 function App() {
   return (
     <BrowserRouter>
-      <div>
-        <nav style={{ padding: "10px", background: "#f0f0f0", marginBottom: "20px" }}>
-          <Link to="/" style={{ marginRight: "10px" }}>Inicio</Link>
-          <Link to="/RegistrarUbicaciones" style={{ marginRight: "10px" }}>Registrar Ubicaciones</Link>
-          <Link to="/RegistrarMovimientos" style={{ marginRight: "10px" }}>Registrar Movimientos</Link>
-          <Link to="/Reservas">Reservas</Link>
-        </nav>
-        
-        <AppRouter />
+      <div className="app-shell">
+        <Sidebar />
+        <main className="main-content">
+          <AppRouter />
+        </main>
       </div>
     </BrowserRouter>
   );
