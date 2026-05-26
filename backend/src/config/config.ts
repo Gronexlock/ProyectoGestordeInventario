@@ -24,4 +24,7 @@ export const config = {
 
   /** Umbral de stock crítico para alertas */
   criticalStockThreshold: 5,
+
+  /** Timezone usada para validaciones horarias de despacho */
+  appTimezone: process.env.APP_TIMEZONE ?? "America/Santiago",
 } as const;
