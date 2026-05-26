@@ -43,9 +43,29 @@ const NAV_ITEMS = [
         <line x1="16" y1="2" x2="16" y2="6"/>
         <line x1="8" y1="2" x2="8" y2="6"/>
         <line x1="3" y1="10" x2="21" y2="10"/>
-        <line x1="8" y1="14" x2="8" y2="14"/>
-        <line x1="12" y1="14" x2="12" y2="14"/>
-        <line x1="16" y1="14" x2="16" y2="14"/>
+      </svg>
+    ),
+  },
+  {
+    to: "/StockUbicaciones",
+    label: "Stock",
+    icon: (
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <line x1="18" y1="20" x2="18" y2="10"/>
+        <line x1="12" y1="20" x2="12" y2="4"/>
+        <line x1="6" y1="20" x2="6" y2="14"/>
+      </svg>
+    ),
+  },
+  {
+    to: "/Despacho",
+    label: "Despacho",
+    icon: (
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="1" y="3" width="15" height="13" rx="1"/>
+        <path d="M16 8h4l3 3v5h-7V8z"/>
+        <circle cx="5.5" cy="18.5" r="2.5"/>
+        <circle cx="18.5" cy="18.5" r="2.5"/>
       </svg>
     ),
   },
@@ -56,6 +76,8 @@ const PAGE_TITLES: Record<string, string> = {
   "/RegistrarUbicaciones": "Registrar Ubicaciones",
   "/RegistrarMovimientos": "Registrar Movimientos",
   "/Reservas": "Reservas",
+  "/StockUbicaciones": "Stock por Ubicación",
+  "/Despacho": "Pedidos para Despacho",
 };
 
 export function Sidebar() {
@@ -66,30 +88,21 @@ export function Sidebar() {
 
   return (
     <>
-      {/* Mobile overlay */}
       {mobileOpen && (
-        <div
-          className="sidebar-overlay"
-          onClick={() => setMobileOpen(false)}
-        />
+        <div className="sidebar-overlay" onClick={() => setMobileOpen(false)} />
       )}
 
-      {/* Mobile top bar */}
       <header className="mobile-topbar">
-        <button
-          className="hamburger"
-          onClick={() => setMobileOpen(true)}
-          aria-label="Abrir menú"
-        >
+        <button className="hamburger" onClick={() => setMobileOpen(true)} aria-label="Abrir menú">
           <span /><span /><span />
         </button>
         <span className="mobile-title">{pageTitle}</span>
         <div className="mobile-logo-dot" />
       </header>
 
-      {/* Sidebar */}
       <aside className={`sidebar ${collapsed ? "sidebar--collapsed" : ""} ${mobileOpen ? "sidebar--mobile-open" : ""}`}>
-        {/* Logo */}
+
+        {/* Logo row */}
         <div className="sidebar-logo">
           <div className="sidebar-logo-icon">
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -97,21 +110,20 @@ export function Sidebar() {
               <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/>
             </svg>
           </div>
-          {!collapsed && <span className="sidebar-logo-text">Inventario</span>}
+
+          {/* Title only visible when expanded */}
+          <span className="sidebar-logo-text">Inventario</span>
+
+          {/* Collapse button — always visible, pushed to right */}
           <button
             className="collapse-btn"
             onClick={() => setCollapsed(!collapsed)}
-            aria-label="Colapsar menú"
+            aria-label={collapsed ? "Expandir menú" : "Colapsar menú"}
           >
             <svg
-              width="16"
-              height="16"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2.5"
-              strokeLinecap="round"
-              strokeLinejoin="round"
+              width="16" height="16" viewBox="0 0 24 24"
+              fill="none" stroke="currentColor" strokeWidth="2.5"
+              strokeLinecap="round" strokeLinejoin="round"
               style={{ transform: collapsed ? "rotate(180deg)" : "none", transition: "transform 0.3s ease" }}
             >
               <polyline points="15 18 9 12 15 6"/>
@@ -119,49 +131,39 @@ export function Sidebar() {
           </button>
         </div>
 
-        {/* Divider */}
         <div className="sidebar-divider" />
 
-        {/* Nav label */}
-        {!collapsed && <p className="sidebar-section-label">MENÚ PRINCIPAL</p>}
+        <p className="sidebar-section-label">MENÚ PRINCIPAL</p>
 
-        {/* Nav items */}
         <nav className="sidebar-nav">
           {NAV_ITEMS.map((item) => (
             <NavLink
               key={item.to}
               to={item.to}
               end={item.to === "/"}
-              className={({ isActive }) =>
-                `sidebar-link ${isActive ? "sidebar-link--active" : ""}`
-              }
+              className={({ isActive }) => `sidebar-link ${isActive ? "sidebar-link--active" : ""}`}
               onClick={() => setMobileOpen(false)}
-              title={collapsed ? item.label : undefined}
+              title={item.label}
             >
               <span className="sidebar-link-icon">{item.icon}</span>
-              {!collapsed && <span className="sidebar-link-label">{item.label}</span>}
-              {!collapsed && (
-                <span className="sidebar-link-arrow">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                    <polyline points="9 18 15 12 9 6"/>
-                  </svg>
-                </span>
-              )}
+              <span className="sidebar-link-label">{item.label}</span>
+              <span className="sidebar-link-arrow">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="9 18 15 12 9 6"/>
+                </svg>
+              </span>
             </NavLink>
           ))}
         </nav>
 
-        {/* Bottom user area */}
         <div className="sidebar-footer">
           <div className="sidebar-divider" />
           <div className="sidebar-user">
             <div className="sidebar-avatar">U</div>
-            {!collapsed && (
-              <div className="sidebar-user-info">
-                <span className="sidebar-user-name">Usuario</span>
-                <span className="sidebar-user-role">Administrador</span>
-              </div>
-            )}
+            <div className="sidebar-user-info">
+              <span className="sidebar-user-name">Usuario</span>
+              <span className="sidebar-user-role">Administrador</span>
+            </div>
           </div>
         </div>
       </aside>

@@ -324,11 +324,16 @@ export const MovementForm = () => {
         }
 
         /* Select */
-        .select-wrapper { position: relative; }
-        .form-select { appearance: none; padding-right: 36px; cursor: pointer; }
+        .select-wrapper { position: relative; display: block; }
+        .form-select {
+          appearance: none; -webkit-appearance: none;
+          padding-right: 36px; cursor: pointer;
+          width: 100%; display: block;
+          font-family: var(--font-body);
+        }
         .select-arrow {
           position: absolute; right: 14px; top: 50%; transform: translateY(-50%);
-          color: #999; pointer-events: none; font-size: 0.9rem;
+          color: #999; pointer-events: none; font-size: 0.9rem; line-height: 1;
         }
 
         /* Textarea */

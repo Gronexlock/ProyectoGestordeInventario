@@ -274,6 +274,7 @@ export const ReservationsPage = () => {
 
         .rp-table {
           width: 100%; border-collapse: collapse; font-size: 0.875rem;
+          font-family: var(--font-body);
         }
         .rp-table th {
           padding: 14px 16px; text-align: left;
@@ -281,10 +282,12 @@ export const ReservationsPage = () => {
           text-transform: uppercase; color: #888;
           border-bottom: 1px solid var(--color-gray);
           background: #fafafa;
+          font-family: var(--font-body);
         }
         .rp-table td {
           padding: 13px 16px; border-bottom: 1px solid #f0f0f0;
           vertical-align: middle; color: var(--color-dark);
+          font-family: var(--font-body);
         }
         .rp-table tr:last-child td { border-bottom: none; }
         .rp-table tbody tr { transition: background var(--transition); }

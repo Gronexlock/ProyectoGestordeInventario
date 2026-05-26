@@ -93,6 +93,7 @@ a { text-decoration: none; color: inherit; }
   padding: 20px 16px 16px;
   position: relative;
   flex-shrink: 0;
+  overflow: hidden;
 }
 
 .sidebar-logo-icon {
@@ -115,6 +116,21 @@ a { text-decoration: none; color: inherit; }
   color: var(--color-white);
   letter-spacing: 0.02em;
   white-space: nowrap;
+  flex: 1;
+  opacity: 1;
+  transition: opacity var(--transition);
+}
+
+/* When collapsed: hide text & nav labels & link labels & arrow, keep collapse-btn */
+.sidebar--collapsed .sidebar-logo-text,
+.sidebar--collapsed .sidebar-section-label,
+.sidebar--collapsed .sidebar-link-label,
+.sidebar--collapsed .sidebar-link-arrow,
+.sidebar--collapsed .sidebar-user-info {
+  opacity: 0;
+  pointer-events: none;
+  width: 0;
+  overflow: hidden;
 }
 
 .collapse-btn {
@@ -124,6 +140,7 @@ a { text-decoration: none; color: inherit; }
   border-radius: var(--radius-sm);
   width: 28px;
   height: 28px;
+  min-width: 28px; /* never shrinks */
   display: flex;
   align-items: center;
   justify-content: center;
@@ -131,6 +148,7 @@ a { text-decoration: none; color: inherit; }
   cursor: pointer;
   flex-shrink: 0;
   transition: background var(--transition), color var(--transition);
+  z-index: 1;
 }
 
 .collapse-btn:hover {
