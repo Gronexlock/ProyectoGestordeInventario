@@ -8,7 +8,7 @@
 //  - Reservas y descuentos de stock via helpers de StockService
 // ============================================================
 
-import { OrderStatus } from "@prisma/client";
+import { OrderStatus, Prisma } from "@prisma/client";
 import prisma from "../prisma/client";
 import { AppError } from "../utils/AppError";
 import { reserveStock, releaseStock, deductStock } from "./stock.service";
@@ -16,10 +16,12 @@ import { CreateOrderDto } from "../utils/types";
 import { config } from "../config/config";
 
 // Transiciones de estado permitidas
+// ROUTE_ASSIGNED es gestionado exclusivamente por el servicio de rutas (no expuesto en PATCH /orders/:id/status)
 const VALID_TRANSITIONS: Record<string, string[]> = {
   PENDING: ["RESERVED", "CANCELLED"],
   RESERVED: ["READY_FOR_DISPATCH", "CANCELLED"],
   READY_FOR_DISPATCH: ["IN_TRANSIT", "CANCELLED"],
+  ROUTE_ASSIGNED: [],
   IN_TRANSIT: ["DELIVERED"],
   DELIVERED: [],
   CANCELLED: [],
@@ -263,7 +265,7 @@ const getCurrentMinutesInTimezone = (timezone: string): number => {
  * Valida que exista un DispatchSchedule no cancelado con scheduleDate = hoy.
  * @throws AppError 400 si no existe o está cancelado
  */
-const validateDispatchSchedule = async (orderId: string): Promise<void> => {
+export const validateDispatchSchedule = async (orderId: string): Promise<void> => {
   const todayStart = new Date();
   todayStart.setHours(0, 0, 0, 0);
   const todayEnd = new Date();
@@ -290,7 +292,7 @@ const validateDispatchSchedule = async (orderId: string): Promise<void> => {
  * de todas las ubicaciones origen del pedido.
  * @throws AppError 400 si alguna ubicación está fuera de su ventana horaria
  */
-const validateDispatchWindow = async (locationIds: string[]): Promise<void> => {
+export const validateDispatchWindow = async (locationIds: string[]): Promise<void> => {
   const uniqueLocationIds = [...new Set(locationIds)];
 
   const locations = await prisma.location.findMany({
@@ -317,6 +319,23 @@ const validateDispatchWindow = async (locationIds: string[]): Promise<void> => {
       );
     }
   }
+};
+
+/**
+ * Aplica la mutación IN_TRANSIT para una orden dentro de una transacción externa.
+ * Usado por route.service para despachar múltiples órdenes en una sola transacción.
+ * routeId se preserva en la orden como referencia histórica de qué ruta la despachó.
+ */
+export const applyInTransitMutation = async (
+  tx: Prisma.TransactionClient,
+  orderId: string,
+  items: { productId: string; locationId: string; quantity: number }[]
+): Promise<void> => {
+  await deductStock(tx, items, orderId);
+  await tx.order.update({
+    where: { id: orderId },
+    data: { status: OrderStatus.IN_TRANSIT },
+  });
 };
 
 /**

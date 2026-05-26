@@ -100,12 +100,14 @@ model Order {
   id           String      @id @default(uuid())
   customerName String
   status       OrderStatus @default(PENDING)
+  routeId      String?
   createdAt    DateTime    @default(now())
   updatedAt    DateTime    @updatedAt
 
   // Relaciones
   items             OrderItem[]
   dispatchSchedules DispatchSchedule[]
+  route             Route?              @relation(fields: [routeId], references: [id], onDelete: SetNull)
 
   @@map("orders")
 }
@@ -188,7 +190,34 @@ enum OrderStatus {
   PENDING            // Pedido recién creado
   RESERVED           // Stock reservado correctamente
   READY_FOR_DISPATCH // Listo para asignar despacho/ruta
+  ROUTE_ASSIGNED     // Asignado a una ruta de despacho
   IN_TRANSIT         // Pedido despachado (stock descontado)
   DELIVERED          // Entrega completada
   CANCELLED          // Pedido cancelado
+}
+
+// ============================================================
+// Enum: RouteStatus
+// ============================================================
+enum RouteStatus {
+  OPEN       // Ruta abierta, aceptando órdenes
+  DISPATCHED // Ruta despachada (todas las órdenes en tránsito)
+  CANCELLED  // Ruta cancelada (órdenes liberadas de vuelta a READY_FOR_DISPATCH)
+}
+
+// ============================================================
+// Modelo: Route (Ruta de despacho)
+// Agrupa órdenes READY_FOR_DISPATCH en un viaje operativo
+// ============================================================
+model Route {
+  id          String      @id @default(cuid())
+  vehicleCode String
+  driverName  String?
+  status      RouteStatus @default(OPEN)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  orders Order[]
+
+  @@map("routes")
 }
