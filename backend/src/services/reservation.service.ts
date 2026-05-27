@@ -1,4 +1,4 @@
-q¿// ============================================================
+// ============================================================
 // Servicio: Reservations (Reservas de Stock)
 // SCRUM-20: cancelación + liberación en un paso
 // SCRUM-33: confirmación de entrega → estado SOLD + movimiento OUT
@@ -75,6 +75,50 @@ export const createReservation = async (dto: CreateReservationDto) => {
     throw new AppError(
       `No se encontró una ubicación con ID "${dto.locationId}".`,
       404
+    );
+  }
+
+  // === 1. VERIFICACIÓN DE HORARIO DE DESPACHO ===
+  const now = new Date();
+  const currentTotalMinutes = now.getHours() * 60 + now.getMinutes();
+
+  const parseTime = (timeStr: string) => {
+    const parts = timeStr.split(':');
+    return (parseInt(parts[0], 10) || 0) * 60 + (parseInt(parts[1], 10) || 0);
+  };
+
+  const startMinutes = parseTime(location.dispatchStart);
+  const endMinutes = parseTime(location.dispatchEnd);
+
+  if (currentTotalMinutes < startMinutes || currentTotalMinutes > endMinutes) {
+    throw new AppError(
+      `No se puede reservar: La sede "${location.name}" fuera de horario (${location.dispatchStart}-${location.dispatchEnd}).`,
+      400
+    );
+  }
+
+  // === 2. VERIFICACIÓN DE LÍMITE DE DESPACHO DIARIO ===
+  const startOfDay = new Date();
+  startOfDay.setHours(0, 0, 0, 0);
+
+  const endOfDay = new Date();
+  endOfDay.setHours(23, 59, 59, 999);
+
+  const todayReservations = await prisma.reservation.aggregate({
+    _sum: { quantity: true },
+    where: {
+      locationId: dto.locationId,
+      createdAt: { gte: startOfDay, lte: endOfDay },
+      status: { notIn: [ReservationStatus.EXPIRED, ReservationStatus.RELEASED] },
+    },
+  });
+
+  const currentDailyTotal = todayReservations._sum.quantity || 0;
+
+  if (currentDailyTotal + dto.quantity > location.maxDailyDispatch) {
+    throw new AppError(
+      `No se puede reservar: La ubicación superaría su límite de despacho diario (${currentDailyTotal}/${location.maxDailyDispatch} artículos reservados hoy).`,
+      400
     );
   }
 

@@ -141,6 +141,7 @@ enum MovementType {
 }
 
 enum ReservationStatus {
+  ACTIVE   // Bloquea stock disponible
   RELEASED // Cancelada y liberada (stock disponible restaurado)
   SOLD     // Entrega confirmada por Proyecto 2 — stock físico descontado
   EXPIRED  // Reserva vencida (TTL) — pendiente de job automático
@@ -152,6 +153,7 @@ model Reservation {
   sku           String
   locationId    String
   quantity      Int
+  status        ReservationStatus @default(ACTIVE)
   createdAt     DateTime          @default(now())
   expiresAt     DateTime
   releasedAt    DateTime?

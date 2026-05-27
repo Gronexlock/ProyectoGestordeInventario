@@ -82,7 +82,7 @@ export const getOrder = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const order = await orderService.getOrderById(req.params.id);
+    const order = await orderService.getOrderById(String(req.params.id));
 
     sendSuccess(res, order, "Pedido encontrado.");
   } catch (error) {
@@ -123,7 +123,7 @@ export const updateOrderStatus = async (
 ): Promise<void> => {
   try {
     const order = await orderService.transitionOrder(
-      req.params.id,
+      String(req.params.id),
       req.body.status
     );
 
