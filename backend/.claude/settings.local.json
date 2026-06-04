@@ -1,0 +1,35 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(if [ ! -d \"c:/Users/adria/Downloads/ProyectoGestordeInventario/backend/docs/proposals\" ]; then mkdir -p \"c:/Users/adria/Downloads/ProyectoGestordeInventario/backend/docs/proposals\"; fi)",
+      "Bash(pnpm prisma *)",
+      "Bash(npx prisma *)",
+      "Bash(dir \"c:\\\\Users\\\\adria\\\\Downloads\\\\ProyectoGestordeInventario\\\\backend\\\\node_modules\")",
+      "PowerShell(Get-ChildItem \"C:\\\\Users\\\\adria\\\\Downloads\\\\ProyectoGestordeInventario\\\\backend\\\\node_modules\" | Select-Object -First 20 | ForEach-Object { $_.Name })",
+      "PowerShell(Get-ChildItem \"C:\\\\Users\\\\adria\\\\Downloads\\\\ProyectoGestordeInventario\\\\backend\\\\node_modules\" -Force | ForEach-Object { $_.Name })",
+      "PowerShell(Get-Command pnpm -ErrorAction SilentlyContinue)",
+      "PowerShell(Get-Command npm -ErrorAction SilentlyContinue)",
+      "PowerShell(Get-Command pnpm)",
+      "Read(//c/Users/adria/AppData/Local/**)",
+      "Read(//c/Program Files/nodejs/**)",
+      "Read(//c/Users/adria/**)",
+      "Read(//c/Program Files/**)",
+      "Bash(Get-Content src/services/order.service.ts)",
+      "Bash(Get-Content src/controllers/order.controller.ts)",
+      "Bash(Get-Content src/routes/order.routes.ts)",
+      "Bash(dir /s /b src)",
+      "Bash(not exist *)",
+      "Bash(Get-ChildItem -Recurse \"c:\\\\Users\\\\adria\\\\Downloads\\\\ProyectoGestordeInventario\\\\backend\\\\src\\\\middlewares\" -Filter \"*auth*\" -ErrorAction SilentlyContinue)",
+      "Bash(git stash *)",
+      "Bash(mkdir -p \"/c/Users/adria/Downloads/ProyectoGestordeInventario/backend/docs/proposals\")",
+      "Bash(mkdir -p \"/c/Users/adria/Downloads/ProyectoGestordeInventario/backend/docs/implementation-plans\")",
+      "PowerShell(New-Item -ItemType Directory -Force \"c:\\\\Users\\\\adria\\\\Downloads\\\\ProyectoGestordeInventario\\\\backend\\\\docs\\\\implementation-plans\")"
+    ],
+    "additionalDirectories": [
+      "c:\\Users\\adria\\Downloads\\ProyectoGestordeInventario\\backend\\docs",
+      "C:\\Users\\adria\\Downloads\\ProyectoGestordeInventario\\backend\\docs\\proposals",
+      "C:\\Users\\adria\\Downloads\\ProyectoGestordeInventario\\backend\\docs\\implementation-plans",
+      "c:\\Users\\adria\\Downloads\\ProyectoGestordeInventario\\backend\\docs\\proposals"
+    ]
+  }
+}

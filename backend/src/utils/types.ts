@@ -29,6 +29,18 @@ export interface CreateProductDto {
   sku: string;
 }
 
+// ── DTOs de Order ────────────────────────────────────────────────
+export interface CreateOrderItemDto {
+  productId: string;
+  locationId: string;
+  quantity: number;
+}
+
+export interface CreateOrderDto {
+  customerName: string;
+  items: CreateOrderItemDto[];
+}
+
 // ── DTOs de Movimiento ───────────────────────────────────────────
 export interface CreateMovementDto {
   productId: string;

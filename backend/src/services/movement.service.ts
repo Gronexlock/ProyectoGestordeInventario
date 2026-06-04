@@ -52,7 +52,30 @@ export const createMovement = async (
     );
   }
 
-  // ── 3. Transacción atómica ────────────────────────────────────
+  // ── 3. Validar horario de despacho (reservas/salidas) ─────────
+  if (dto.type === "OUT") {
+    const now = new Date();
+    const currentTotalMinutes = now.getHours() * 60 + now.getMinutes();
+
+    const parseTime = (timeStr: string) => {
+      const parts = timeStr.split(':');
+      const h = parseInt(parts[0], 10) || 0;
+      const m = parseInt(parts[1], 10) || 0;
+      return h * 60 + m;
+    };
+
+    const startMinutes = parseTime(location.dispatchStart);
+    const endMinutes = parseTime(location.dispatchEnd);
+
+    if (currentTotalMinutes < startMinutes || currentTotalMinutes > endMinutes) {
+      throw new AppError(
+        `Operación rechazada: La ubicación "${location.name}" está fuera de su horario de despacho (Horario: ${location.dispatchStart} a ${location.dispatchEnd}).`,
+        400
+      );
+    }
+  }
+
+  // ── 4. Transacción atómica ────────────────────────────────────
   // Todo o nada: si algo falla, se hace rollback automáticamente
   const result = await prisma.$transaction(async (tx) => {
     // 3a. Buscar stock existente para producto+ubicación

@@ -1,9 +1,11 @@
 // ============================================================
 // Servicio: Stock
 // Lógica de negocio para consultar niveles de inventario
+// y helpers de reserva para pedidos
 // ============================================================
 
 import prisma from "../prisma/client";
+import { Prisma } from "@prisma/client";
 import { AppError } from "../utils/AppError";
 import { getActiveReservedQuantity } from "./reservation.service";
 
@@ -36,6 +38,123 @@ const enrichStockRecord = async (stock: {
     reserved,
     stockDisponible: stock.quantity - reserved,
   };
+};
+
+// Tipo del cliente de transacción Prisma
+type TxClient = Prisma.TransactionClient;
+
+// Ítem mínimo necesario para operar reservas
+interface StockItem {
+  productId: string;
+  locationId: string;
+  quantity: number;
+}
+
+// ── Helpers de reserva (solo para uso interno desde OrderService) ─
+
+/**
+ * Reserva stock para una lista de ítems dentro de una transacción.
+ * Valida disponibilidad (quantity - reserved) antes de incrementar.
+ * Si cualquier ítem falla, el rollback es automático.
+ */
+export const reserveStock = async (
+  tx: TxClient,
+  items: StockItem[]
+): Promise<void> => {
+  for (const item of items) {
+    const stock = await tx.stock.findUnique({
+      where: {
+        productId_locationId: {
+          productId: item.productId,
+          locationId: item.locationId,
+        },
+      },
+    });
+
+    if (!stock) {
+      throw new AppError(
+        `No existe stock para el producto "${item.productId}" en la ubicación "${item.locationId}".`,
+        400
+      );
+    }
+
+    const available = stock.quantity - stock.reserved;
+
+    if (available < item.quantity) {
+      throw new AppError(
+        `Stock insuficiente para el producto "${item.productId}" en ubicación "${item.locationId}". ` +
+          `Disponible: ${available} unidades, solicitado: ${item.quantity}.`,
+        400
+      );
+    }
+
+    await tx.stock.update({
+      where: {
+        productId_locationId: {
+          productId: item.productId,
+          locationId: item.locationId,
+        },
+      },
+      data: { reserved: { increment: item.quantity } },
+    });
+  }
+};
+
+/**
+ * Libera reservas de stock para una lista de ítems dentro de una transacción.
+ * Se usa al cancelar un pedido en estado RESERVED o READY_FOR_DISPATCH.
+ */
+export const releaseStock = async (
+  tx: TxClient,
+  items: StockItem[]
+): Promise<void> => {
+  for (const item of items) {
+    await tx.stock.update({
+      where: {
+        productId_locationId: {
+          productId: item.productId,
+          locationId: item.locationId,
+        },
+      },
+      data: { reserved: { decrement: item.quantity } },
+    });
+  }
+};
+
+/**
+ * Convierte reservas en salidas efectivas de stock.
+ * Decrementa quantity y reserved, y crea un Movement OUT por ítem.
+ * Se usa al transicionar un pedido a IN_TRANSIT.
+ */
+export const deductStock = async (
+  tx: TxClient,
+  items: StockItem[],
+  orderId: string
+): Promise<void> => {
+  for (const item of items) {
+    await tx.stock.update({
+      where: {
+        productId_locationId: {
+          productId: item.productId,
+          locationId: item.locationId,
+        },
+      },
+      data: {
+        quantity: { decrement: item.quantity },
+        reserved: { decrement: item.quantity },
+      },
+    });
+
+    await tx.movement.create({
+      data: {
+        productId: item.productId,
+        locationId: item.locationId,
+        type: "OUT",
+        quantity: item.quantity,
+        note: `Despacho pedido ${orderId}`,
+      },
+    });
+  }
 };
 
 /**

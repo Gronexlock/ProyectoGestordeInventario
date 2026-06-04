@@ -10,7 +10,7 @@ import { body, query } from "express-validator";
 import * as reservationController from "../controllers/reservation.controller";
 import { validateRequest } from "../middlewares/validateRequest";
 
-const router = Router();
+const router: Router = Router();
 
 const createReservationRules = [
   body("orderId")
@@ -65,7 +65,7 @@ router.get(
 export default router;
 
 // Ruta separada montada en app.ts como /release-reservation
-export const releaseReservationRouter = Router();
+export const releaseReservationRouter: Router = Router();
 
 releaseReservationRouter.post(
   "/",

@@ -1,5 +1,7 @@
 import { BrowserRouter, NavLink } from "react-router-dom";
 import { AppRouter } from "./routes";
+import { Sidebar } from "./components/Sidebar";
+import "./index.css";
 
 const NAV_LINKS = [
   { to: "/Stock", label: "📊 Stock" },

@@ -26,6 +26,7 @@ const startServer = async (): Promise<void> => {
       console.log(`   🌍 Entorno: ${config.nodeEnv}`);
       console.log(`   🚀 Servidor: http://localhost:${PORT}`);
       console.log(`   📡 API:      http://localhost:${PORT}/api/v1`);
+      console.log(`   🛠️  SWAGGER:  http://localhost:${PORT}/api-docs`);
       console.log("   ====================================\n");
     });
   } catch (error) {

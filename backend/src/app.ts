@@ -3,9 +3,11 @@
 // Registra middlewares globales y todas las rutas de la API
 // ============================================================
 
-import express, { Request, Response } from "express";
+import express, { Application, Request, Response } from "express";
 import cors from "cors";
 import morgan from "morgan";
+import swaggerUi from "swagger-ui-express";
+import { swaggerSpec } from "./config/swagger";
 
 // Importar rutas
 import locationRoutes from "./routes/location.routes";
@@ -16,11 +18,14 @@ import reservationRoutes, {
   releaseReservationRouter,
 } from "./routes/reservation.routes";
 import externalRoutes from "./routes/external.routes";
+import orderRoutes from "./routes/order.routes";
+import routeRoutes from "./routes/route.routes";
+import logisticsRoutes from "./routes/logistics.routes";
 
-// Importar middleware de errores (siempre al final)
+// Importar middleware de errores (siempre al final)zr
 import { errorHandler } from "./middlewares/errorHandler";
 
-const app = express();
+const app: express.Application = express();
 
 // ── Middlewares Globales ────────────────────────────────────────
 app.use(cors());                                    // Habilitar CORS
@@ -41,6 +46,8 @@ app.get("/", (_req: Request, res: Response) => {
       reservations: "/api/v1/reservations",
       releaseReservation: "/api/v1/release-reservation",
       confirmDelivery: "/api/v1/external/reservations/:id/confirm-delivery",
+      orders: "/api/v1/orders",
+      routes: "/api/v1/routes",
     },
     timestamp: new Date().toISOString(),
   });
@@ -60,6 +67,12 @@ app.use(`${API_PREFIX}/movements`, movementRoutes);
 app.use(`${API_PREFIX}/reservations`, reservationRoutes);
 app.use(`${API_PREFIX}/release-reservation`, releaseReservationRouter);
 app.use(`${API_PREFIX}/external`, externalRoutes);
+app.use(`${API_PREFIX}/orders`, orderRoutes);
+app.use(`${API_PREFIX}/routes`, routeRoutes);
+app.use(`${API_PREFIX}/logistics`, logisticsRoutes);
+
+// ── Documentación Swagger UI ────────────────────────────────────
+app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
 // ── Ruta no encontrada (404) ────────────────────────────────────
 app.use((_req: Request, res: Response) => {
