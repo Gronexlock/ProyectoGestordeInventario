@@ -12,8 +12,11 @@
 ```
 Frontend (React + Vite, :5173)
     │
-    ├── /RegistrarUbicaciones  →  POST /api/v1/locations
+    ├── /               →  StockPage (reporte de niveles, filtros, tarjetas resumen)
+    ├── /Stock           →  StockPage
+    ├── /HistorialMovimientos  →  MovementsHistoryPage (filtros tipo/texto/fecha)
     ├── /RegistrarMovimientos  →  POST /api/v1/movements
+    ├── /RegistrarUbicaciones  →  POST /api/v1/locations
     └── /Reservas              →  GET  /api/v1/reservations
                                  POST /api/v1/reservations       (mock crear reserva P3)
                                  POST /api/v1/release-reservation
@@ -25,7 +28,8 @@ Backend (Express + TypeScript, :3000)   │
     ├── /api/v1/locations                (CRUD completo: POST, GET, GET/:id, PUT/:id, DELETE/:id)
     ├── /api/v1/products                 (crear + listar)
     ├── /api/v1/stock                    (consulta global y por ubicación, incluye stockDisponible)
-    ├── /api/v1/movements                (registro IN/OUT + historial)
+    ├── /api/v1/stock/:locationId        (stock filtrado por ubicación)
+    ├── /api/v1/movements                (registro IN/OUT + historial completo con product+location)
     ├── /api/v1/reservations             (mock Proyecto 3 — crear/listar con filtro por status)
     ├── /api/v1/release-reservation      (SCRUM-20 — ACTIVE → RELEASED)
     └── /api/v1/external/reservations/:id/confirm-delivery  (SCRUM-33 — ACTIVE → SOLD)
@@ -112,12 +116,14 @@ Por ahora la creación de reservas se simula con `POST /api/v1/reservations` des
 - Validación de stock negativo, alertas críticas (`≤ 5`), transacciones atómicas
 - Middlewares: `errorHandler`, `validateRequest` (express-validator), CORS, morgan
 
-### Frontend — UI básica
-- Navegación: Inicio, Registrar Ubicaciones, Registrar Movimientos, **Reservas**
+### Frontend — UI operativa
+- Navegación: navbar oscura con `NavLink` activo — **Stock** (inicio), **Historial**, Registrar Movimiento, Ubicaciones, **Reservas**
+- `StockPage`: reporte de niveles de stock con tarjetas resumen (registros, uds. físicas, reservadas, crítico, sin stock), tabla con barra de progreso y badge Crítico/Bajo/Normal, filtros por ubicación y búsqueda por nombre/SKU
+- `MovementsHistoryPage`: historial completo de movimientos con tarjetas (total, entradas, salidas, balance neto), filtros por tipo, búsqueda de texto y rango de fechas
 - `LocationForm`: crea ubicaciones con nombre, tipo, capacidad
 - `MovementForm`: selecciona producto, ubicación, tipo (IN/OUT), cantidad, nota. Valida capacidad en frontend para entradas.
 - `ReservationsPage`: lista todas las reservas con badge de estado; botones **Liberar** y **Confirmar entrega** solo en ACTIVE
-- Servicios frontend: `locationService`, `movementService`, `productService`, `reservationService`
+- Servicios frontend: `locationService`, `movementService`, `productService`, `reservationService`, **`stockService`**
 
 ### Schema de base de datos
 - Modelos: `Location`, `Product`, `Stock`, `Movement`, `Reservation`, `DispatchSchedule`
