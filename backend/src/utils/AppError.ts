@@ -12,8 +12,8 @@ export class AppError extends Error {
     this.statusCode = statusCode;
     this.isOperational = true; // Error esperado (no un bug)
 
-    // Mantener el stack trace correcto
     Error.captureStackTrace(this, this.constructor);
-    Object.setPrototypeOf(this, AppError.prototype);
+    // Preserva la cadena de prototipos correcta para subclases
+    Object.setPrototypeOf(this, new.target.prototype);
   }
 }

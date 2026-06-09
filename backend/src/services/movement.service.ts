@@ -1,25 +1,15 @@
 // ============================================================
 // Servicio: Movements (Movimientos de Inventario)
-// 
-// Lógica de negocio crítica:
-//  - Validar existencia de producto y ubicación
-//  - Crear stock automáticamente si no existe
-//  - Impedir stock negativo en salidas (OUT)
-//  - Actualizar stock con transacción atómica
-//  - Emitir alerta si stock ≤ umbral crítico
 // ============================================================
 
 import prisma from "../prisma/client";
 import { CreateMovementDto, MovementResult } from "../utils/types";
 import { AppError } from "../utils/AppError";
-import { config } from "../config/config";
+import { logger } from "../config/logger";
 
 /**
  * Registra un movimiento de inventario (entrada o salida) y
  * actualiza el stock correspondiente de forma atómica.
- *
- * @throws AppError 404 si el producto o la ubicación no existen
- * @throws AppError 400 si el movimiento genera stock negativo
  */
 export const createMovement = async (
   dto: CreateMovementDto
@@ -31,28 +21,19 @@ export const createMovement = async (
   ]);
 
   if (!product) {
-    throw new AppError(
-      `No se encontró un producto con ID "${dto.productId}".`,
-      404
-    );
+    throw new AppError(`No se encontró un producto con ID "${dto.productId}".`, 404);
   }
 
   if (!location) {
-    throw new AppError(
-      `No se encontró una ubicación con ID "${dto.locationId}".`,
-      404
-    );
+    throw new AppError(`No se encontró una ubicación con ID "${dto.locationId}".`, 404);
   }
 
   // ── 2. Validar cantidad positiva ──────────────────────────────
   if (dto.quantity <= 0) {
-    throw new AppError(
-      "La cantidad del movimiento debe ser mayor a cero.",
-      400
-    );
+    throw new AppError("La cantidad del movimiento debe ser mayor a cero.", 400);
   }
 
-  // ── 3. Validar horario de despacho (reservas/salidas) ─────────
+  // ── 3. Validar horario de despacho (salidas) ─────────
   if (dto.type === "OUT") {
     const now = new Date();
     const currentTotalMinutes = now.getHours() * 60 + now.getMinutes();
@@ -69,14 +50,13 @@ export const createMovement = async (
 
     if (currentTotalMinutes < startMinutes || currentTotalMinutes > endMinutes) {
       throw new AppError(
-        `Operación rechazada: La ubicación "${location.name}" está fuera de su horario de despacho (Horario: ${location.dispatchStart} a ${location.dispatchEnd}).`,
+        `Operación rechazada: La ubicación "${location.name}" está fuera de su horario de despacho (${location.dispatchStart} a ${location.dispatchEnd}).`,
         400
       );
     }
   }
 
   // ── 4. Transacción atómica ────────────────────────────────────
-  // Todo o nada: si algo falla, se hace rollback automáticamente
   const result = await prisma.$transaction(async (tx) => {
     // 3a. Buscar stock existente para producto+ubicación
     const existingStock = await tx.stock.findUnique({
@@ -88,7 +68,6 @@ export const createMovement = async (
       },
     });
 
-    // 3b. Calcular nueva cantidad según tipo de movimiento
     const currentQuantity = existingStock?.quantity ?? 0;
     let newQuantity: number;
 
@@ -136,22 +115,54 @@ export const createMovement = async (
       },
     });
 
+    // 3e. Generar/Resolver Alertas de Stock Crítico de forma persistente
+    if (dto.type === "OUT" && newQuantity <= product.minStock) {
+      const existingAlert = await tx.stockAlert.findFirst({
+        where: {
+          productId: dto.productId,
+          locationId: dto.locationId,
+          status: "PENDING",
+        },
+      });
+
+      if (!existingAlert) {
+        await tx.stockAlert.create({
+          data: {
+            productId: dto.productId,
+            locationId: dto.locationId,
+            currentStock: newQuantity,
+            minStock: product.minStock,
+            status: "PENDING",
+          },
+        });
+      }
+    } else if (dto.type === "IN" && newQuantity > product.minStock) {
+      await tx.stockAlert.updateMany({
+        where: {
+          productId: dto.productId,
+          locationId: dto.locationId,
+          status: "PENDING",
+        },
+        data: {
+          status: "RESOLVED",
+          resolvedAt: new Date(),
+        },
+      });
+    }
+
     return { movement, updatedStock, newQuantity };
   });
 
-  // ── 4. Alerta de stock crítico ────────────────────────────────
   let alert: string | undefined;
-
-  if (result.newQuantity <= config.criticalStockThreshold) {
-    alert =
-      `⚠️ STOCK CRÍTICO: "${product.name}" (SKU: ${product.sku}) ` +
-      `en "${location.name}" tiene solo ${result.newQuantity} unidades.`;
-
-    // Alerta visible en los logs del servidor
-    console.warn(`\n⚠️  ALERTA DE STOCK CRÍTICO`);
-    console.warn(`   Producto:  ${product.name} (${product.sku})`);
-    console.warn(`   Ubicación: ${location.name}`);
-    console.warn(`   Stock:     ${result.newQuantity} unidades (umbral: ≤${config.criticalStockThreshold})\n`);
+  if (result.newQuantity <= product.minStock) {
+    alert = `⚠️ STOCK CRÍTICO: "${product.name}" (SKU: ${product.sku}) en "${location.name}" tiene solo ${result.newQuantity} unidades.`;
+    logger.warn("Stock crítico detectado", {
+      product: product.name,
+      sku: product.sku,
+      location: location.name,
+      currentStock: result.newQuantity,
+      minStock: product.minStock,
+    });
   }
 
   return {
@@ -159,6 +170,197 @@ export const createMovement = async (
     updatedStock: result.updatedStock,
     alert,
   };
+};
+
+/**
+ * Registra una transferencia atómica de inventario entre dos ubicaciones.
+ */
+export const createTransfer = async (dto: {
+  productId: string;
+  sourceLocationId: string;
+  destinationLocationId: string;
+  quantity: number;
+  note?: string;
+}) => {
+  // 1. Validaciones
+  const [product, sourceLoc, destLoc] = await Promise.all([
+    prisma.product.findUnique({ where: { id: dto.productId } }),
+    prisma.location.findUnique({ where: { id: dto.sourceLocationId } }),
+    prisma.location.findUnique({ where: { id: dto.destinationLocationId } }),
+  ]);
+
+  if (!product) throw new AppError("Producto no encontrado.", 404);
+  if (!sourceLoc) throw new AppError("Ubicación de origen no encontrada.", 404);
+  if (!destLoc) throw new AppError("Ubicación de destino no encontrada.", 404);
+  if (dto.sourceLocationId === dto.destinationLocationId) {
+    throw new AppError("La ubicación de origen y destino deben ser distintas.", 400);
+  }
+  if (dto.quantity <= 0) {
+    throw new AppError("La cantidad debe ser mayor a cero.", 400);
+  }
+
+  // Validar horario de despacho en la origen
+  const now = new Date();
+  const currentTotalMinutes = now.getHours() * 60 + now.getMinutes();
+  const parseTime = (timeStr: string) => {
+    const parts = timeStr.split(":");
+    return (parseInt(parts[0], 10) || 0) * 60 + (parseInt(parts[1], 10) || 0);
+  };
+
+  const startMinutes = parseTime(sourceLoc.dispatchStart);
+  const endMinutes = parseTime(sourceLoc.dispatchEnd);
+
+  if (currentTotalMinutes < startMinutes || currentTotalMinutes > endMinutes) {
+    throw new AppError(
+      `Operación rechazada: La ubicación de origen "${sourceLoc.name}" está fuera de su horario de despacho (${sourceLoc.dispatchStart} a ${sourceLoc.dispatchEnd}).`,
+      400
+    );
+  }
+
+  // 2. Transacción
+  return prisma.$transaction(async (tx) => {
+    // A. Stock Origen
+    const sourceStock = await tx.stock.findUnique({
+      where: {
+        productId_locationId: {
+          productId: dto.productId,
+          locationId: dto.sourceLocationId,
+        },
+      },
+    });
+
+    const currentSourceQty = sourceStock?.quantity ?? 0;
+    const currentSourceReserved = sourceStock?.reserved ?? 0;
+    const availableSource = currentSourceQty - currentSourceReserved;
+
+    if (availableSource < dto.quantity) {
+      throw new AppError(
+        `Stock disponible insuficiente en "${sourceLoc.name}". ` +
+        `Disponible: ${availableSource} (Físico: ${currentSourceQty}, Reservado: ${currentSourceReserved}). ` +
+        `Requerido: ${dto.quantity}.`,
+        400
+      );
+    }
+
+    // B. Capacidad Destino
+    const destStock = await tx.stock.findUnique({
+      where: {
+        productId_locationId: {
+          productId: dto.productId,
+          locationId: dto.destinationLocationId,
+        },
+      },
+    });
+
+    if (destLoc.capacity) {
+      const allStocks = await tx.stock.findMany({
+        where: { locationId: dto.destinationLocationId },
+      });
+      const totalDestQty = allStocks.reduce((total, s) => total + s.quantity, 0);
+
+      if (totalDestQty + dto.quantity > destLoc.capacity) {
+        throw new AppError(
+          `Operación rechazada: La ubicación de destino "${destLoc.name}" no cuenta con capacidad suficiente (Capacidad máxima: ${destLoc.capacity}, Ocupado: ${totalDestQty}).`,
+          400
+        );
+      }
+    }
+
+    // C. Actualizar existencias
+    const newSourceQty = currentSourceQty - dto.quantity;
+    const newDestQty = (destStock?.quantity ?? 0) + dto.quantity;
+
+    await tx.stock.update({
+      where: {
+        productId_locationId: {
+          productId: dto.productId,
+          locationId: dto.sourceLocationId,
+        },
+      },
+      data: { quantity: newSourceQty },
+    });
+
+    await tx.stock.upsert({
+      where: {
+        productId_locationId: {
+          productId: dto.productId,
+          locationId: dto.destinationLocationId,
+        },
+      },
+      create: {
+        productId: dto.productId,
+        locationId: dto.destinationLocationId,
+        quantity: newDestQty,
+      },
+      update: {
+        quantity: newDestQty,
+      },
+    });
+
+    // D. Registrar movimientos
+    const transferNote = dto.note ? `Transferencia: ${dto.note}` : "Transferencia manual";
+
+    const movOut = await tx.movement.create({
+      data: {
+        productId: dto.productId,
+        locationId: dto.sourceLocationId,
+        destinationLocationId: dto.destinationLocationId,
+        type: "TRANSFER",
+        quantity: dto.quantity,
+        note: `Salida de transferencia hacia "${destLoc.name}". ${transferNote}`,
+      },
+    });
+
+    const movIn = await tx.movement.create({
+      data: {
+        productId: dto.productId,
+        locationId: dto.destinationLocationId,
+        type: "TRANSFER",
+        quantity: dto.quantity,
+        note: `Ingreso de transferencia desde "${sourceLoc.name}". ${transferNote}`,
+      },
+    });
+
+    // E. Generar alertas en origen si aplica
+    if (newSourceQty <= product.minStock) {
+      const existingAlert = await tx.stockAlert.findFirst({
+        where: {
+          productId: dto.productId,
+          locationId: dto.sourceLocationId,
+          status: "PENDING",
+        },
+      });
+
+      if (!existingAlert) {
+        await tx.stockAlert.create({
+          data: {
+            productId: dto.productId,
+            locationId: dto.sourceLocationId,
+            currentStock: newSourceQty,
+            minStock: product.minStock,
+            status: "PENDING",
+          },
+        });
+      }
+    }
+
+    // F. Resolver alertas en destino si aplica
+    if (newDestQty > product.minStock) {
+      await tx.stockAlert.updateMany({
+        where: {
+          productId: dto.productId,
+          locationId: dto.destinationLocationId,
+          status: "PENDING",
+        },
+        data: {
+          status: "RESOLVED",
+          resolvedAt: new Date(),
+        },
+      });
+    }
+
+    return { movOut, movIn };
+  });
 };
 
 /**

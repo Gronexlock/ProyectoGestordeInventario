@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import type { Movement, MovementType } from "../types/movement";
 import { getAllMovements } from "../services/movementService";
 
@@ -29,22 +29,23 @@ export const MovementsHistoryPage = () => {
   const [filterDateFrom, setFilterDateFrom] = useState("");
   const [filterDateTo, setFilterDateTo] = useState("");
 
-  const loadMovements = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const data = await getAllMovements();
-      setMovements(data);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Error al cargar movimientos");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
   useEffect(() => {
+    let cancelled = false;
+    const loadMovements = async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const data = await getAllMovements();
+        if (!cancelled) setMovements(data);
+      } catch (err) {
+        if (!cancelled) setError(err instanceof Error ? err.message : "Error al cargar movimientos");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
     loadMovements();
-  }, [loadMovements]);
+    return () => { cancelled = true; };
+  }, []);
 
   const filtered = movements.filter((m) => {
     if (filterType !== "all" && m.type !== filterType) return false;

@@ -13,6 +13,9 @@ async function main() {
   console.log("🌱 Iniciando seed de base de datos...\n");
 
   // ── Limpiar datos existentes (orden inverso por FK) ─────────────
+  await prisma.stockAlert.deleteMany();
+  await prisma.replenishmentOrder.deleteMany();
+  await prisma.supplier.deleteMany();
   await prisma.reservation.deleteMany();
   await prisma.dispatchSchedule.deleteMany();
   await prisma.movement.deleteMany();
@@ -45,6 +48,7 @@ async function main() {
     data: {
       name: "Laptop Dell Inspiron 15",
       sku: "DELL-INS-15-001",
+      minStock: 5,
     },
   });
 
@@ -52,6 +56,7 @@ async function main() {
     data: {
       name: "Mouse Inalámbrico Logitech",
       sku: "LOG-MOUSE-WL-002",
+      minStock: 10, // Umbral crítico para este mouse
     },
   });
 
@@ -78,7 +83,7 @@ async function main() {
       {
         productId: mouse.id,
         locationId: tiendaNorte.id,
-        quantity: 3, // ⚠️ Por debajo del umbral crítico (≤5)
+        quantity: 3, // ⚠️ Por debajo del umbral crítico (≤10)
       },
     ],
   });
@@ -147,6 +152,51 @@ async function main() {
 
   console.log("✅ Reservas de prueba creadas (2 ACTIVE).");
 
+  // ── 6. Crear Proveedores ─────────────────────────────────────────
+  const provA = await prisma.supplier.create({
+    data: {
+      name: "Distribuidora Tech S.A.",
+      email: "contacto@distritech.com",
+      phone: "+56 9 1234 5678",
+    },
+  });
+
+  const provB = await prisma.supplier.create({
+    data: {
+      name: "Importadora LogiGlobal",
+      email: "ventas@logiglobal.com",
+      phone: "+56 2 9876 5432",
+    },
+  });
+
+  console.log(`✅ Proveedores creados: ${provA.name}, ${provB.name}`);
+
+  // ── 7. Crear Alerta de Stock Crítico Inicial ─────────────────────
+  await prisma.stockAlert.create({
+    data: {
+      productId: mouse.id,
+      locationId: tiendaNorte.id,
+      currentStock: 3,
+      minStock: 10,
+      status: "PENDING",
+    },
+  });
+
+  console.log(`✅ Alerta de stock crítico inicial generada para Mouse en Tienda Norte.`);
+
+  // ── 8. Crear Orden de Reposición Inicial ────────────────────────
+  await prisma.replenishmentOrder.create({
+    data: {
+      productId: mouse.id,
+      locationId: tiendaNorte.id,
+      supplierId: provB.id,
+      quantity: 50,
+      status: "PENDING",
+    },
+  });
+
+  console.log(`✅ Orden de reposición inicial creada para Mouse (50 unidades).`);
+
   // ── Resumen ──────────────────────────────────────────────────────
   console.log("\n📊 Resumen del seed:");
   console.log(`   📍 Ubicaciones: 2`);
@@ -154,6 +204,9 @@ async function main() {
   console.log(`   📊 Registros de stock: 4`);
   console.log(`   🔄 Movimientos: 4`);
   console.log(`   🔒 Reservas:    2 (ACTIVE)`);
+  console.log(`   🏢 Proveedores: 2`);
+  console.log(`   ⚠️  Alertas de Stock: 1 (PENDING)`);
+  console.log(`   📋 Órdenes de Reposición: 1`);
   console.log("\n🎉 Seed completado exitosamente!\n");
 }
 

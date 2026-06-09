@@ -26,10 +26,12 @@ model Location {
   maxDailyDispatch Int @default(100) // Capacidad máxima de despacho diario
 
   // Relaciones
-  stocks    Stock[]
-  movements Movement[]
-  reservations Reservation[]
-  orderItems OrderItem[]
+  stocks              Stock[]
+  movements           Movement[]
+  reservations        Reservation[]
+  orderItems          OrderItem[]
+  stockAlerts         StockAlert[]
+  replenishmentOrders ReplenishmentOrder[]
 
   @@map("locations")
 }
@@ -42,12 +44,15 @@ model Product {
   id        String   @id @default(uuid())
   name      String
   sku       String   @unique // Código único del producto
+  minStock  Int      @default(5) // Umbral de stock crítico
   createdAt DateTime @default(now())
 
   // Relaciones
-  stocks     Stock[]
-  movements  Movement[]
-  orderItems OrderItem[]
+  stocks              Stock[]
+  movements           Movement[]
+  orderItems          OrderItem[]
+  stockAlerts         StockAlert[]
+  replenishmentOrders ReplenishmentOrder[]
 
   @@map("products")
 }
@@ -77,14 +82,16 @@ model Stock {
 // Registra cada entrada o salida de inventario
 // ============================================================
 model Movement {
-  id            String       @id @default(uuid())
-  productId     String
-  locationId    String
-  type          MovementType // "IN" = entrada, "OUT" = salida
-  quantity      Int
-  note          String?      // Nota opcional del movimiento
-  reservationId Int?         // Vincula venta confirmada con reserva (SCRUM-33)
-  createdAt     DateTime     @default(now())
+  id                    String       @id @default(uuid())
+  productId             String
+  locationId            String
+  destinationLocationId String?      // ID de bodega destino para transferencias
+  type                  MovementType // "IN" = entrada, "OUT" = salida, "TRANSFER", "RETURN"
+  quantity              Int
+  note                  String?      // Nota opcional del movimiento
+  reservationId         Int?         // Vincula venta confirmada con reserva (SCRUM-33)
+  relatedMovementId     String?      // ID de movimiento relacionado (ej: devolución)
+  createdAt             DateTime     @default(now())
 
   // Relaciones
   product    Product  @relation(fields: [productId], references: [id])
@@ -136,8 +143,10 @@ model OrderItem {
 // Enum: MovementType
 // ============================================================
 enum MovementType {
-  IN  // Entrada de mercancía
-  OUT // Salida de mercancía
+  IN       // Entrada de mercancía
+  OUT      // Salida de mercancía
+  TRANSFER // Transferencia de mercancía entre ubicaciones
+  RETURN   // Devolución de mercancía
 }
 
 enum ReservationStatus {
@@ -222,4 +231,70 @@ model Route {
   orders Order[]
 
   @@map("routes")
+}
+
+// ============================================================
+// Modelo: StockAlert (Alerta de Stock Crítico)
+// ============================================================
+model StockAlert {
+  id           String      @id @default(uuid())
+  productId    String
+  locationId   String
+  currentStock Int
+  minStock     Int
+  status       AlertStatus @default(PENDING)
+  createdAt    DateTime    @default(now())
+  resolvedAt   DateTime?
+
+  product  Product  @relation(fields: [productId], references: [id])
+  location Location @relation(fields: [locationId], references: [id])
+
+  @@map("stock_alerts")
+}
+
+enum AlertStatus {
+  PENDING
+  RESOLVED
+  DISMISSED
+}
+
+// ============================================================
+// Modelo: Supplier (Proveedor)
+// ============================================================
+model Supplier {
+  id        String   @id @default(uuid())
+  name      String
+  email     String
+  phone     String?
+  createdAt DateTime @default(now())
+
+  replenishmentOrders ReplenishmentOrder[]
+  @@map("suppliers")
+}
+
+// ============================================================
+// Modelo: ReplenishmentOrder (Orden de Reposición / Compra)
+// ============================================================
+model ReplenishmentOrder {
+  id          String              @id @default(uuid())
+  productId   String
+  locationId  String
+  supplierId  String
+  quantity    Int
+  status      ReplenishmentStatus @default(PENDING)
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+
+  product  Product  @relation(fields: [productId], references: [id])
+  location Location @relation(fields: [locationId], references: [id])
+  supplier Supplier @relation(fields: [supplierId], references: [id])
+
+  @@map("replenishment_orders")
+}
+
+enum ReplenishmentStatus {
+  PENDING
+  ORDERED
+  RECEIVED
+  CANCELLED
 }

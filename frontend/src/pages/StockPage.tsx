@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import type { StockItem } from "../types/stock";
 import { getAllStock } from "../services/stockService";
 import { getAllLocations } from "../services/locationService";
@@ -25,24 +25,27 @@ export const StockPage = () => {
   const [error, setError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
-  const loadStock = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const [stockData, locData] = await Promise.all([getAllStock(), getAllLocations()]);
-      setStock(stockData);
-      setLocations(locData);
-      setLastUpdated(new Date());
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Error al cargar el stock");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
   useEffect(() => {
+    let cancelled = false;
+    const loadStock = async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const [stockData, locData] = await Promise.all([getAllStock(), getAllLocations()]);
+        if (!cancelled) {
+          setStock(stockData);
+          setLocations(locData);
+          setLastUpdated(new Date());
+        }
+      } catch (err) {
+        if (!cancelled) setError(err instanceof Error ? err.message : "Error al cargar el stock");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
     loadStock();
-  }, [loadStock]);
+    return () => { cancelled = true; };
+  }, []);
 
   const filtered = stock.filter((item) => {
     const matchLocation = selectedLocation === "all" || item.locationId === selectedLocation;

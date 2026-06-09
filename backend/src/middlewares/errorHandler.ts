@@ -7,6 +7,7 @@
 import { Request, Response, NextFunction } from "express";
 import { AppError } from "../utils/AppError";
 import { config } from "../config/config";
+import { logger } from "../config/logger";
 
 /**
  * Middleware de manejo de errores global.
@@ -56,8 +57,7 @@ export const errorHandler = (
   }
 
   // ── Error desconocido ──────────────────────────────────────────
-  // En producción no exponemos detalles internos
-  console.error("❌ Error no controlado:", err);
+  logger.error("Error no controlado", { message: err.message, stack: err.stack });
 
   res.status(500).json({
     success: false,

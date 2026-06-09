@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import type { Location } from "../types/location";
 import { getAllLocations } from "../services/locationService";
 
@@ -25,20 +25,23 @@ export const StockUbicationPage = () => {
   const [search, setSearch]       = useState("");
   const [filterType, setFilterType] = useState<string>("todos");
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const data = await getAllLocations();
-      setLocations(data);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Error al cargar ubicaciones");
-    } finally {
-      setLoading(false);
-    }
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const data = await getAllLocations();
+        if (!cancelled) setLocations(data);
+      } catch (err) {
+        if (!cancelled) setError(err instanceof Error ? err.message : "Error al cargar ubicaciones");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+    load();
+    return () => { cancelled = true; };
   }, []);
-
-  useEffect(() => { load(); }, [load]);
 
   const types = ["todos", ...Array.from(new Set(locations.map((l) => l.type)))];
 

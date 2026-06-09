@@ -1,7 +1,8 @@
 // ============================================================
 // Rutas: Movements (Movimientos de Inventario)
-// POST /movements   → registrar movimiento
-// GET  /movements   → historial de movimientos
+// POST /movements          → registrar movimiento (IN/OUT)
+// POST /movements/transfer → registrar transferencia entre ubicaciones
+// GET  /movements          → historial de movimientos
 // ============================================================
 
 import { Router } from "express";
@@ -11,9 +12,6 @@ import { validateRequest } from "../middlewares/validateRequest";
 
 const router: Router = Router();
 
-/**
- * Reglas de validación para registrar un movimiento
- */
 const createMovementRules = [
   body("productId")
     .trim()
@@ -39,78 +37,34 @@ const createMovementRules = [
     .isLength({ max: 255 }).withMessage("La nota no puede superar 255 caracteres."),
 ];
 
-// ── Rutas ─────────────────────────────────────────────────────────
+const createTransferRules = [
+  body("productId")
+    .trim()
+    .notEmpty().withMessage("El ID del producto es requerido.")
+    .isUUID().withMessage("El productId debe ser un UUID válido."),
 
-/**
- * @openapi
- * /movements:
- *   post:
- *     tags: [Movements]
- *     summary: Registrar un movimiento de inventario
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required: [productId, locationId, type, quantity]
- *             properties:
- *               productId:
- *                 type: string
- *                 format: uuid
- *               locationId:
- *                 type: string
- *                 format: uuid
- *               type:
- *                 type: string
- *                 enum: [IN, OUT]
- *                 example: IN
- *               quantity:
- *                 type: integer
- *                 minimum: 1
- *                 example: 10
- *               note:
- *                 type: string
- *                 maxLength: 255
- *                 example: Reposición semanal
- *     responses:
- *       201:
- *         description: Movimiento registrado y stock actualizado
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/Movement'
- *       400:
- *         description: Datos inválidos o stock insuficiente para OUT
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/ErrorResponse'
- *       404:
- *         description: Producto o ubicación no encontrados
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/ErrorResponse'
- *   get:
- *     tags: [Movements]
- *     summary: Listar historial de movimientos
- *     responses:
- *       200:
- *         description: Lista de movimientos ordenados por fecha descendente
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                 data:
- *                   type: array
- *                   items:
- *                     $ref: '#/components/schemas/Movement'
- */
+  body("sourceLocationId")
+    .trim()
+    .notEmpty().withMessage("El ID de la ubicación origen es requerido.")
+    .isUUID().withMessage("El sourceLocationId debe ser un UUID válido."),
+
+  body("destinationLocationId")
+    .trim()
+    .notEmpty().withMessage("El ID de la ubicación destino es requerido.")
+    .isUUID().withMessage("El destinationLocationId debe ser un UUID válido."),
+
+  body("quantity")
+    .notEmpty().withMessage("La cantidad es requerida.")
+    .isInt({ min: 1 }).withMessage("La cantidad debe ser un entero mayor a cero."),
+
+  body("note")
+    .optional()
+    .trim()
+    .isLength({ max: 255 }).withMessage("La nota no puede superar 255 caracteres."),
+];
+
 router.post("/", createMovementRules, validateRequest, movementController.createMovement);
+router.post("/transfer", createTransferRules, validateRequest, movementController.createTransfer);
 router.get("/", movementController.getMovements);
 
 export default router;

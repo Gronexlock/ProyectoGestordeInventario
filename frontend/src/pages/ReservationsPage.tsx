@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import type { Reservation } from "../types/reservation";
 import {
   getReservations,
@@ -20,22 +20,23 @@ export const ReservationsPage = () => {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
-  const loadReservations = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const data = await getReservations();
-      setReservations(data);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Error al cargar reservas");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
   useEffect(() => {
+    let cancelled = false;
+    const loadReservations = async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const data = await getReservations();
+        if (!cancelled) setReservations(data);
+      } catch (err) {
+        if (!cancelled) setError(err instanceof Error ? err.message : "Error al cargar reservas");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
     loadReservations();
-  }, [loadReservations]);
+    return () => { cancelled = true; };
+  }, []);
 
   const handleRelease = async (reservation: Reservation) => {
     const confirmed = window.confirm(

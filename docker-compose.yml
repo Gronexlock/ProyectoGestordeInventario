@@ -1,0 +1,56 @@
+version: "3.9"
+
+services:
+  # ── Base de Datos ─────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: inventario_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-inventario}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-inventario123}
+      POSTGRES_DB: ${POSTGRES_DB:-inventario_db}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-inventario}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Backend ───────────────────────────────────────────────────
+  backend:
+    build:
+      context: ./backend
+      target: production
+    container_name: inventario_backend
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-inventario}:${POSTGRES_PASSWORD:-inventario123}@postgres:5432/${POSTGRES_DB:-inventario_db}
+      NODE_ENV: production
+      PORT: 3000
+    ports:
+      - "3000:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - backend_logs:/app/logs
+
+  # ── Frontend ──────────────────────────────────────────────────
+  frontend:
+    build:
+      context: ./frontend
+      target: production
+    container_name: inventario_frontend
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+
+volumes:
+  postgres_data:
+  backend_logs:

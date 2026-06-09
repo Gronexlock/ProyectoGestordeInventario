@@ -517,3 +517,104 @@ a { text-decoration: none; color: inherit; }
 .sidebar--collapsed .collapse-btn i {
   margin: 0 !important;
 }
+
+/* ─── Toast Notifications ───────────────────────────────────────── */
+.toast-container {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  z-index: 9999;
+  max-width: 380px;
+  width: calc(100% - 48px);
+  pointer-events: none;
+}
+
+.toast {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 18px;
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  font-family: var(--font-body);
+  font-size: 0.88rem;
+  font-weight: 500;
+  color: var(--color-dark);
+  background: var(--color-white);
+  border: 1px solid rgba(0,0,0,0.06);
+  pointer-events: auto;
+  animation: toastSlideIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) both;
+  transition: all 0.25s ease;
+}
+
+@keyframes toastSlideIn {
+  from { opacity: 0; transform: translateY(20px) scale(0.95); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.toast-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  font-size: 0.75rem;
+  font-weight: bold;
+  color: var(--color-white);
+  flex-shrink: 0;
+}
+
+.toast-message {
+  flex: 1;
+  line-height: 1.4;
+}
+
+.toast-close {
+  background: none;
+  border: none;
+  font-size: 1.25rem;
+  color: #aaa;
+  cursor: pointer;
+  padding: 0 4px;
+  line-height: 1;
+  transition: color var(--transition);
+  display: flex;
+  align-items: center;
+}
+
+.toast-close:hover {
+  color: var(--color-dark);
+}
+
+/* Toast Variants */
+.toast--success {
+  border-left: 4px solid #10b981;
+}
+.toast--success .toast-icon {
+  background: #10b981;
+}
+
+.toast--error {
+  border-left: 4px solid #ef4444;
+}
+.toast--error .toast-icon {
+  background: #ef4444;
+}
+
+.toast--warning {
+  border-left: 4px solid #f59e0b;
+}
+.toast--warning .toast-icon {
+  background: #f59e0b;
+}
+
+.toast--info {
+  border-left: 4px solid #3b82f6;
+}
+.toast--info .toast-icon {
+  background: #3b82f6;
+}

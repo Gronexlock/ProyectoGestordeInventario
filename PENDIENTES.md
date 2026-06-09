@@ -1,285 +1,243 @@
 # 📋 Pendientes del Proyecto — Gap Analysis
 
-> Última actualización: 2026-06-03
-> Estado general: **desarrollo intermedio-avanzado** — núcleo operativo + flujo de reservas (SCRUM-20 / SCRUM-33) implementado con mocks internos.
-
-> ✅ **Control básico cumplido al 100%** — stock por ubicación, movimientos manuales, reporte de niveles y historial con filtros ya operativos.
+> Última actualización: 2026-06-09
+> Estado general: **producción-ready en funcionalidades core** — arquitectura por capas, tests 100%, seguridad básica, CI/CD y Docker implementados.
 
 ---
 
-## 🔄 Flujo actual del sistema
+## 🏛️ Arquitectura actual
 
 ```
-Frontend (React + Vite, :5173)
+HTTP Request
     │
-    ├── /               →  StockPage (reporte de niveles, filtros, tarjetas resumen)
-    ├── /Stock           →  StockPage
-    ├── /HistorialMovimientos  →  MovementsHistoryPage (filtros tipo/texto/fecha)
-    ├── /RegistrarMovimientos  →  POST /api/v1/movements
-    ├── /RegistrarUbicaciones  →  POST /api/v1/locations
-    └── /Reservas              →  GET  /api/v1/reservations
-                                 POST /api/v1/reservations       (mock crear reserva P3)
-                                 POST /api/v1/release-reservation
-                                 PATCH /api/v1/external/reservations/:id/confirm-delivery
-                                        │
-Backend (Express + TypeScript, :3000)   │
-    ├── GET  /                           (health check + docs)
-    ├── GET  /health
-    ├── /api/v1/locations                (CRUD completo: POST, GET, GET/:id, PUT/:id, DELETE/:id)
-    ├── /api/v1/products                 (crear + listar)
-    ├── /api/v1/stock                    (consulta global y por ubicación, incluye stockDisponible)
-    ├── /api/v1/stock/:locationId        (stock filtrado por ubicación)
-    ├── /api/v1/movements                (registro IN/OUT + historial completo con product+location)
-    ├── /api/v1/reservations             (mock Proyecto 3 — crear/listar con filtro por status)
-    ├── /api/v1/release-reservation      (SCRUM-20 — ACTIVE → RELEASED)
-    └── /api/v1/external/reservations/:id/confirm-delivery  (SCRUM-33 — ACTIVE → SOLD)
-                                        │
-Prisma ORM  →  PostgreSQL
+Express Router  ←  helmet (headers) + rate-limit (200 req/15 min)
+    │
+Controller      ←  valida entrada · llama service · formatea respuesta · sin any
+    │
+Service         ←  lógica de negocio · NotFoundError / ConflictError / ValidationError
+    │
+Prisma ORM      ←  transacciones atómicas · PostgreSQL
+    │
+PostgreSQL 16
 ```
 
-**Reglas de negocio activas hoy:**
-- Stock no puede quedar negativo en salidas (`OUT`).
-- **Reservas ACTIVE reducen `stockDisponible` pero no `quantity` físico** hasta confirmar venta.
-- **Cancelación + liberación en un paso:** `ACTIVE → RELEASED` vía `POST /release-reservation`.
-- **Entrega confirmada (SCRUM-33):** `ACTIVE → SOLD` + movimiento `OUT` + descuento de `quantity`.
-- Movimientos y actualización de stock ocurren en transacción atómica.
-- Alerta de stock crítico con umbral global (`criticalStockThreshold = 5`).
-- Validación de capacidad de ubicación en frontend al registrar entradas (`IN`).
-- `dispatchStart` y `dispatchEnd` en schema con defaults `"8:00"`/`"18:00"` — **no expuestos en API ni UI**.
+**Frontend:**
+```
+React 19 + Vite
+    │
+React Query (TanStack) ← caché + deduplicación + loading/error declarativo
+    │
+Services (fetch)       ← abstractores de la API REST
+    │
+ErrorBoundary          ← captura errores de render en toda la app
+```
 
 ---
 
-## ✅ Lo implementado recientemente (SCRUM-20 / SCRUM-33)
+## 🔄 Flujo de rutas del sistema
 
-| HdU / Tarea | Implementación |
-|-------------|----------------|
-| SCRUM-20 | Cancelación + liberación continua en un paso |
-| SCRUM-57 | `cancelAndReleaseReservation()` en `reservation.service.ts` |
-| SCRUM-58 | `stockDisponible` en `stock.service.ts` |
-| SCRUM-59 | Trazabilidad por cambio de estado en `Reservation` *(ver deuda técnica)* |
-| SCRUM-60 | `POST /api/v1/release-reservation` |
-| SCRUM-61 | Página `/Reservas` con botones **Liberar** y **Confirmar entrega** |
-| SCRUM-33 | `PATCH /api/v1/external/reservations/:id/confirm-delivery` |
+```
+Frontend (:5173 dev / :80 prod)
+    ├── /                      →  StockPage
+    ├── /Stock                 →  StockPage
+    ├── /HistorialMovimientos  →  MovementsHistoryPage
+    ├── /RegistrarMovimientos  →  POST /api/v1/movements
+    ├── /Transferir            →  POST /api/v1/movements/transfer        (SCRUM-23)
+    ├── /Alertas               →  GET  /api/v1/alerts                    (SCRUM-26/27)
+    │                              POST /api/v1/replenishment/replenishment
+    │                              PATCH /api/v1/replenishment/replenishment/:id/status
+    │                              GET/POST /api/v1/replenishment/suppliers
+    ├── /RegistrarUbicaciones  →  POST /api/v1/locations
+    ├── /Reservas              →  GET/POST /api/v1/reservations
+    ├── /StockUbicaciones      →  GET /api/v1/stock/:locationId
+    └── /Despacho              →  rutas logísticas (Proyecto 2)
 
-**Migración:** `20260521120000_add_reservation_status` — enum `ReservationStatus`, campos `releasedAt`/`soldAt`, `Movement.reservationId`.
-
----
-
-## 📐 Decisiones de diseño acordadas
-
-### 1. Cancelación + liberación en un solo paso
-No hay estado intermedio `CANCELLED`. Al cancelar una compra, la reserva pasa directamente de `ACTIVE → RELEASED` y el stock disponible se restaura en la misma operación.
-
-### 2. Historial de movimientos en liberaciones
-- **Venta confirmada (SCRUM-33):** sí genera `Movement` tipo `OUT` con `reservationId`.
-- **Liberación por cancelación:** por ahora solo cambio de estado en `Reservation` *(sin registro en `movements`)*.
-
-> **🔮 Deuda técnica — SCRUM-59:** En el futuro conviene agregar trazabilidad de liberaciones mediante una de estas opciones:
-> - Tabla `ReservationLog` para auditoría de cambios de estado, o
-> - Nuevo valor `MovementType.RELEASE` / campo `relatedReservationId` en `Movement`.
-> - Objetivo: historial unificado consultable desde el panel de movimientos.
-
-### 3. POST vs PATCH — cuándo usar cada uno
-
-| Verbo | Uso en este proyecto | Ejemplo |
-|-------|---------------------|---------||
-| **POST** | Crear recurso nuevo o **acción compuesta** que no es una simple edición de campos | `POST /release-reservation` (cancela + libera) |
-| **PATCH** | **Actualización parcial** de un recurso existente identificado por ID | `PATCH /external/reservations/:id/confirm-delivery` (ACTIVE → SOLD) |
-
-**Recomendación aplicada:** `POST` para liberación (acción de negocio compuesta) y `PATCH` para confirmación de entrega (transición de estado sobre una reserva concreta). Es semánticamente correcto según REST: PATCH modifica un recurso; POST ejecuta una operación o crea algo nuevo.
-
-### 4. Modelo de stock con reservas
-- Crear reserva → solo reduce `stockDisponible`.
-- Confirmar entrega → descuenta `quantity` físico con movimiento `OUT`.
-- Liberar reserva → restaura `stockDisponible` sin tocar `quantity`.
-
-### 5. Integración Proyecto 3 (mock interno)
-Por ahora la creación de reservas se simula con `POST /api/v1/reservations` desde el mismo backend/frontend. El endpoint acepta `orderId`, `sku`, `locationId`, `quantity` y `expiresAt` (opcional, default 24 h).
-
-> **🔮 Pendiente futuro — Proyecto 3 externo:**
-> - Mover creación a `POST /api/v1/external/reservations` con autenticación (API Key / JWT).
-> - Validar TTL (`expiresAt`) con job periódico (`node-cron`) → estado `EXPIRED` + liberación automática.
-> - Endpoint `GET /api/v1/external/stock/:sku` con filtro por ubicación.
-> - Rate limiting en rutas `/external/*`.
+Backend (:3000)
+    ├── /api/v1/locations, /products, /stock, /movements, /movements/transfer
+    ├── /api/v1/alerts, /replenishment/*
+    ├── /api/v1/reservations, /release-reservation, /external/*
+    ├── /api/v1/orders, /routes, /logistics
+    └── /api-docs (Swagger UI)
+```
 
 ---
 
-## ✅ Lo que ya estaba implementado (base)
+## ✅ Mejoras implementadas — Sprint 3 + Refactoring
 
-### Backend — API operativa
-- CRUD completo de ubicaciones (POST, GET, GET/:id, PUT/:id, DELETE/:id)
-  - Validación: nombres únicos, tipos permitidos (`bodega`, `tienda`, `almacen`, `deposito`, `otro`), capacidad opcional
-  - Protección: no se puede eliminar ubicación con stock asociado
-- Crear y listar productos
-- Consulta de stock global y por ubicación **con `stockDisponible`**
-- Registro de movimientos `IN`/`OUT` con historial (incluye `product` y `location` en respuesta)
-- Validación de stock negativo, alertas críticas (`≤ 5`), transacciones atómicas
-- Middlewares: `errorHandler`, `validateRequest` (express-validator), CORS, morgan
+### Nuevas funcionalidades (Sprint 3)
+| HdU | Implementación |
+|-----|----------------|
+| **SCRUM-23** | Transferencia atómica: `POST /api/v1/movements/transfer` + `TransferPage` |
+| **SCRUM-26** | Alertas automáticas de stock crítico (`StockAlert`) en OUT/TRANSFER |
+| **SCRUM-27** | Panel de reposición: alertas, órdenes de compra, proveedores |
 
-### Frontend — UI operativa
-- Navegación: navbar oscura con `NavLink` activo — **Stock** (inicio), **Historial**, Registrar Movimiento, Ubicaciones, **Reservas**
-- `StockPage`: reporte de niveles de stock con tarjetas resumen (registros, uds. físicas, reservadas, crítico, sin stock), tabla con barra de progreso y badge Crítico/Bajo/Normal, filtros por ubicación y búsqueda por nombre/SKU
-- `MovementsHistoryPage`: historial completo de movimientos con tarjetas (total, entradas, salidas, balance neto), filtros por tipo, búsqueda de texto y rango de fechas
-- `LocationForm`: crea ubicaciones con nombre, tipo, capacidad
-- `MovementForm`: selecciona producto, ubicación, tipo (IN/OUT), cantidad, nota. Valida capacidad en frontend para entradas.
-- `ReservationsPage`: lista todas las reservas con badge de estado; botones **Liberar** y **Confirmar entrega** solo en ACTIVE
-- Servicios frontend: `locationService`, `movementService`, `productService`, `reservationService`, **`stockService`**
-
-### Schema de base de datos
-- Modelos: `Location`, `Product`, `Stock`, `Movement`, `Reservation`, `DispatchSchedule`
-- Enum: `ReservationStatus` (`ACTIVE`, `RELEASED`, `SOLD`, `EXPIRED`)
-- Enum: `Priority` (`LOW`, `NORMAL`, `HIGH`, `CRITICAL`) — declarado pero no usado en modelos activos
-- `Location`: `dispatchStart` / `dispatchEnd` (default `"8:00"` / `"18:00"`)
-- `Movement.reservationId`: vincula venta confirmada con su reserva
-
----
-
-## ⚠️ Implementado parcialmente
-
-| Elemento | Estado | Falta |
-|----------|--------|-------|
-| `Location.dispatchStart` / `dispatchEnd` | ✅ Schema + defaults | Exponer en API (`createLocation`, `updateLocation`) y formulario frontend |
-| `DispatchSchedule` | ✅ Schema | Servicio, endpoints y relación con pedidos |
-| `Priority` enum | ✅ Declarado | No está relacionado a ningún modelo activo |
-| Proyecto 3 externo | 🔶 Mock interno (`POST /api/v1/reservations`) | API externa, TTL automático, seguridad |
-| Proyecto 2 externo | 🔶 PATCH mock | API Key, webhook real de logística |
-| Auditoría liberaciones | 🔶 Solo cambio de estado | Registro en `Movement` o tabla `ReservationLog` |
-| Historial de movimientos (frontend) | ✅ Implementado | `MovementsHistoryPage` con filtros por tipo, búsqueda y fechas |
-| Tipos de ubicación | 🔶 Texto libre (`bodega`, `tienda`…) | Considerar enum `centro_distribucion`, `punto_atencion` según reqs |
-
-> **Deuda técnica:** existe `backend/src/prisma/schema.prisma` (schema desactualizado / duplicado). El canónico es `backend/prisma/schema.prisma`.
+### Mejoras de calidad de software
+| Área | Implementación |
+|------|----------------|
+| **Arquitectura** | `alert.service.ts` + `replenishment.service.ts` extraídos de controllers |
+| **Error hierarchy** | `NotFoundError`, `ValidationError`, `ConflictError`, `BusinessRuleError` |
+| **Tipado estricto** | Eliminados todos los `any` en controllers y services |
+| **Logger** | Winston: JSON en producción, coloreado en desarrollo, silencioso en tests |
+| **Env validation** | Zod valida `DATABASE_URL` + vars al arranque desde `server.ts` |
+| **Seguridad** | Helmet (security headers) + express-rate-limit (200 req / 15 min) |
+| **ESLint backend** | Flat config con `@typescript-eslint`, reglas `no-explicit-any` y `no-console` |
+| **TanStack Query** | `AlertsPage` y `TransferPage` migradas a `useQuery` / `useMutation` |
+| **ErrorBoundary** | Captura errores de render en toda la app con UI de recuperación |
+| **Accesibilidad** | `aria-label`, `aria-required`, `aria-busy`, `role`, `htmlFor` en formularios clave |
+| **Tests** | 66 tests backend (100% cob.) + 24 frontend (100% cob.) — 90 tests totales |
+| **Docker** | Dockerfile multi-stage backend + frontend (Nginx), `docker-compose.yml` completo |
+| **CI/CD** | GitHub Actions: lint + tests + docker build en cada PR a main/develop |
+| **Husky** | Pre-commit hook que corre `lint-staged` antes de cada commit |
 
 ---
 
-## ❌ Pendientes por Requerimiento
+## 📐 Decisiones de diseño vigentes
+
+### Jerarquía de errores
+```
+Error
+ └── AppError (isOperational: true)
+      ├── NotFoundError   (404) — recurso no encontrado
+      ├── ValidationError (400) — datos de entrada inválidos
+      ├── ConflictError   (409) — estado final, duplicado
+      └── BusinessRuleError (422) — regla de negocio violada
+```
+
+### Service Layer
+- Controllers: reciben request → validan entrada (tipos) → llaman service → responden.
+- Services: contienen toda la lógica de negocio y acceso a Prisma.
+- No hay lógica de negocio en controllers.
+
+### React Query
+- `staleTime: 30s` — los datos se consideran frescos por 30 segundos.
+- Mutaciones invalidan sus queries relacionadas con `invalidateQueries`.
+- Errores de fetch se manejan con `onError` en cada mutación.
+
+### Transferencias atómicas (SCRUM-23)
+Una sola transacción Prisma: valida stock disponible (físico − reservado) → verifica capacidad destino → descuenta origen → suma destino → registra 2 movimientos TRANSFER → crea/resuelve alertas.
+
+### Alertas automáticas (SCRUM-26)
+Se crean al detectar `stock ≤ product.minStock` en OUT o TRANSFER. Se auto-resuelven cuando un IN supera el umbral. Sin duplicados: si ya hay alerta PENDING, no se crea otra.
+
+### Reposición → RECEIVED (SCRUM-27)
+Transacción atómica: incrementa stock → registra movimiento IN → actualiza orden → resuelve alertas PENDING si `stock > minStock`.
 
 ---
 
-### 1. 📍 Catálogo de Ubicaciones — ~55%
+## ⚠️ Pendientes (no relacionados con API Design)
 
-#### Backend
-- [ ] Exponer `dispatchStart` y `dispatchEnd` en create/update de ubicaciones (ya en schema, falta en DTO y rutas)
-- [ ] Campo `transportRestrictions` → nueva migración
-- [ ] Tipos `"centro_distribucion"` y `"punto_atencion"` (o enum Prisma)
-- [ ] Endpoints `DispatchSchedule` (CRUD)
+### Frontend
+- [ ] Campos `dispatchStart` / `dispatchEnd` en `LocationForm`
+- [ ] Migrar `StockPage`, `MovementsHistoryPage`, `ReservationsPage` a React Query
+- [ ] Página detalle de ubicación
 
-#### Frontend
-- [ ] Campos horario (`dispatchStart`/`dispatchEnd`) y restricciones en `LocationForm`
-- [ ] Página detalle de ubicación con stock y reservas asociadas
+### Backend
+- [ ] Campo `transportRestrictions` en Location (migración + endpoint)
+- [ ] `SCRUM-59` — Trazabilidad de liberaciones: `ReservationLog` o `MovementType.RELEASE`
+- [ ] Notificaciones por email (`nodemailer`) al generar alerta crítica
 
----
-
-### 2. 🔄 Movimientos y Transacciones — ~65%
-
-#### Backend — Schema
-- [ ] `MovementType.TRANSFER` y `RETURN`
-- [ ] `destinationLocationId`, `relatedMovementId` en modelo `Movement`
-
-#### Backend — Lógica
-- [ ] Servicio y endpoint de transferencias entre ubicaciones (descuenta origen, suma destino, atómico)
-- [ ] Devoluciones vinculadas a salida original (`relatedMovementId`)
-- [ ] Validar reservas activas antes de salidas manuales `OUT` (hoy solo valida stock físico)
-
-#### Frontend
-- [x] Página de historial de movimientos con filtros por tipo, búsqueda de texto y rango de fechas (`MovementsHistoryPage`)
-- [ ] Formulario para `TRANSFER` y `RETURN`
-
----
-
-### 3. 🔔 Reposiciones y Alertas — ~10%
-
-#### Backend — Schema
-- [ ] `Product.minStock` (umbral mínimo por producto)
-- [ ] Modelo `Supplier` (proveedor)
-- [ ] Modelo `ReplenishmentOrder` (pedido de reposición)
-
-#### Backend — Lógica
-- [ ] Servicio de reposición: detectar stock ≤ `minStock` y crear `ReplenishmentOrder`
-- [ ] Job periódico (`node-cron`) para revisión de umbrales
-- [ ] Notificación por email (`nodemailer`) al superar umbral crítico
-- [ ] Endpoints CRUD de `ReplenishmentOrder`
-
-#### Frontend
-- [ ] Panel de alertas de stock crítico
-- [ ] Vista de pedidos de reposición
-
----
-
-### 4. 🔌 Integraciones Externas — ~35%
-
-#### Implementado (mock)
-- [x] `POST /api/v1/reservations` — crear reserva (mock P3)
-- [x] `POST /api/v1/release-reservation` — liberar (SCRUM-20)
-- [x] `PATCH /api/v1/external/reservations/:id/confirm-delivery` — vender (SCRUM-33)
-- [x] `stockDisponible` en consultas de stock
-
-#### Pendiente
-- [ ] Migrar creación de reservas a `POST /api/v1/external/reservations`
-- [ ] `GET /api/v1/external/stock/:sku` con filtro por ubicación
+### Integraciones externas
+- [ ] Migrar reservas a `POST /api/v1/external/reservations`
+- [ ] `GET /api/v1/external/stock/:sku`
 - [ ] TTL automático de reservas (`node-cron` → `EXPIRED` + liberación)
 - [ ] API Keys / JWT para proyectos externos
-- [ ] Rate limiting en `/external/*`
-- [ ] Webhook o callback real desde Proyecto 2 (logística) para confirmar entregas
+
+### API Design (coordinación con otros grupos)
+- [ ] Paginación en endpoints de listas (movements, orders, stock)
+- [ ] Versionado formal de API (estrategia de deprecación v1 → v2)
+- [ ] Idempotency keys para evitar doble submit
+- [ ] HATEOAS mínimo en respuestas
 
 ---
 
-## 🗃️ Resumen de Cambios al Schema de Prisma
+## 🧪 Tests
 
-| Cambio | Estado |
-|--------|--------|
-| `Location.dispatchStart` / `dispatchEnd` | ✅ Migrado (sin exponer en API) |
-| `Reservation` + `ReservationStatus` | ✅ Migrado + API |
-| `Movement.reservationId` | ✅ Migrado |
-| `DispatchSchedule` | ✅ Migrado (sin API) |
-| `Priority` enum | ✅ Declarado (no vinculado) |
-| `ReservationLog` o `MovementType.RELEASE` | ❌ Futuro (SCRUM-59) |
-| `Location.transportRestrictions` | ❌ Pendiente |
-| `MovementType.TRANSFER` / `RETURN` | ❌ Pendiente |
-| `Product.minStock`, `Supplier`, `ReplenishmentOrder` | ❌ Pendiente |
-
-> ⚠️ Ejecutar `npx prisma migrate dev` desde `backend/` tras clonar o actualizar schema.
-
----
-
-## 📦 Dependencias Externas a Instalar (estimado)
-
-| Librería | Para qué |
-|----------|----------|
-| `nodemailer` + `@types/nodemailer` | Alertas de reposición por email |
-| `node-cron` | TTL de reservas + revisión de umbrales de stock |
-
----
-
-## 🎯 Próximos pasos sugeridos
-
-> ✅ **Control básico completado** — reporte de stock (`StockPage`) e historial de movimientos (`MovementsHistoryPage`) ya implementados.
-
-1. **Horarios de ubicación** — exponer `dispatchStart`/`dispatchEnd` en API y `LocationForm` (cambio pequeño, alto impacto).
-2. **Auditoría SCRUM-59** — `ReservationLog` o movimiento de liberación.
-3. **Transferencias / devoluciones** — extender `MovementType` + lógica atómica + formulario frontend.
-4. **Reposiciones** — `minStock` por producto + pedidos automáticos.
-5. **Proyecto 3 real** — externalizar reservas + TTL + API Key.
-
----
-
-## 🧪 Cómo probar SCRUM-20 / SCRUM-33 localmente
+### Backend — 66 tests, 100% cobertura
 
 ```bash
-# Backend
 cd backend
-npm install        # o pnpm install
-# Configurar .env con DATABASE_URL
-npx prisma migrate dev
-npm run db:seed
-npm run dev
-
-# Frontend
-cd frontend
-npm install        # o pnpm install
-npm run dev
+npm run test             # rápido, sin cobertura
+npm run test:coverage    # con reporte de cobertura
 ```
 
-1. Ir a http://localhost:5173/Reservas — ver reservas ACTIVE del seed.
-2. **Liberar** → estado RELEASED, `stockDisponible` sube.
-3. **Confirmar entrega** (mock P2) → estado SOLD, movimiento OUT, `quantity` baja.
-4. Verificar stock: `GET http://localhost:3000/api/v1/stock`
+| Archivo | Tests | Stmts | Branch | Funcs | Lines |
+|---------|-------|-------|--------|-------|-------|
+| `movement.service.ts` | 22 | 100% | 100% | 100% | 100% |
+| `alert.service.ts` | 4 | 100% | 100% | 100% | 100% |
+| `replenishment.service.ts` | 11 | 100% | 100% | 100% | 100% |
+| `alert.controller.ts` | 5 | 100% | 100% | 100% | 100% |
+| `replenishment.controller.ts` | 19 | 100% | 100% | 100% | 100% |
+| `errors.ts` | 5 | 100% | 100% | 100% | 100% |
+
+**Estrategia de mocking:**
+- Prisma mockeado con `mockDeep<PrismaClient>()` vía `moduleNameMapper` en Jest
+- Controllers testeados mockeando sus services (`jest.mock('../../services/...')`)
+- `$transaction` mockeado para ejecutar callbacks sin DB real
+- `Date` controlada con `jest.useFakeTimers()` para validar horarios de despacho
+
+### Frontend — 24 tests, 100% cobertura
+
+```bash
+cd frontend
+pnpm test              # rápido
+pnpm test:coverage     # con reporte
+```
+
+| Archivo | Tests |
+|---------|-------|
+| `alertService.ts` | 5 |
+| `replenishmentService.ts` | 11 |
+| `movementService.ts` | 8 |
+
+**Estrategia:** `fetch` global mockeado con `vi.fn()` para simular respuestas ok y error de cada endpoint.
+
+---
+
+## 🐳 Docker
+
+```bash
+# Levantar todo el stack (postgres + backend + frontend)
+docker compose up --build
+
+# Solo base de datos (para desarrollo local del backend)
+docker compose up postgres
+
+# Ver logs
+docker compose logs -f backend
+```
+
+Servicios:
+- `postgres` — PostgreSQL 16 con healthcheck
+- `backend` — Node.js 22 multi-stage, arranque tras healthcheck de postgres
+- `frontend` — Nginx con SPA fallback + caché de assets
+
+---
+
+## 🔀 CI/CD
+
+GitHub Actions ejecuta en cada push/PR a `main` o `develop`:
+1. **Backend**: `npm run lint` + `npm run test:coverage`
+2. **Frontend**: `pnpm lint` + `pnpm test:coverage`
+3. **Docker**: build de imágenes de producción (verifica que compilan)
+
+Artefactos de cobertura se guardan automáticamente en cada run.
+
+---
+
+## 🧰 Cómo probar localmente
+
+```bash
+# Con Docker (modo producción)
+docker compose up --build
+# → http://localhost (frontend) + http://localhost:3000 (API)
+
+# Modo desarrollo
+cd backend && npm run dev    # http://localhost:3000
+cd frontend && pnpm dev      # http://localhost:5173
+```
+
+### Flujos clave
+1. **Transferencia** (SCRUM-23): `/Transferir` → producto + origen + destino → confirmar
+2. **Alerta** (SCRUM-26): Registrar OUT hasta bajar bajo `minStock` → ver alerta en `/Alertas`
+3. **Reposición** (SCRUM-27): Desde alerta → "Reponer Stock" → proveedor + cantidad → "✓ Recibido" → stock sube + alerta resuelta
+4. **Reservas** (SCRUM-20/33): `/Reservas` → Liberar (ACTIVE→RELEASED) o Confirmar entrega (ACTIVE→SOLD)

@@ -41,6 +41,37 @@ export const createMovement = async (
 };
 
 /**
+ * POST /movements/transfer
+ * Registra una transferencia atómica entre dos ubicaciones
+ */
+export const createTransfer = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const dto = {
+      productId: req.body.productId,
+      sourceLocationId: req.body.sourceLocationId,
+      destinationLocationId: req.body.destinationLocationId,
+      quantity: req.body.quantity,
+      note: req.body.note,
+    };
+
+    const result = await movementService.createTransfer(dto);
+
+    sendSuccess(
+      res,
+      result,
+      "Transferencia de inventario realizada exitosamente.",
+      201
+    );
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
  * GET /movements
  * Historial de todos los movimientos registrados
  */

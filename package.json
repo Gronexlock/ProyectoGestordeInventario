@@ -1,0 +1,24 @@
+{
+  "name": "inventario-distribuido",
+  "private": true,
+  "description": "Monorepo — Sistema de Gestión de Inventario Distribuido",
+  "scripts": {
+    "test:backend": "npm test --prefix backend",
+    "test:frontend": "pnpm --dir frontend test",
+    "lint:backend": "npm run lint --prefix backend",
+    "lint:frontend": "pnpm --dir frontend lint",
+    "prepare": "husky"
+  },
+  "devDependencies": {
+    "husky": "^9.0.0",
+    "lint-staged": "^15.0.0"
+  },
+  "lint-staged": {
+    "backend/src/**/*.ts": [
+      "npm run lint --prefix backend"
+    ],
+    "frontend/src/**/*.{ts,tsx}": [
+      "pnpm --dir frontend lint"
+    ]
+  }
+}

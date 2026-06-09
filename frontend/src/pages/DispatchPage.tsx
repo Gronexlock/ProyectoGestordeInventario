@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 // Ajusta según los tipos reales de tu backend cuando estén disponibles
@@ -41,15 +41,19 @@ export const DispachPage = () => {
   const [filterPriority, setFilterPriority] = useState<string>("TODAS");
   const [search, setSearch]     = useState("");
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    // Simula latencia de red; reemplaza con tu llamada real al servicio
-    await new Promise((r) => setTimeout(r, 500));
-    setOrders(MOCK_ORDERS);
-    setLoading(false);
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      setLoading(true);
+      await new Promise((r) => setTimeout(r, 500));
+      if (!cancelled) {
+        setOrders(MOCK_ORDERS);
+        setLoading(false);
+      }
+    };
+    load();
+    return () => { cancelled = true; };
   }, []);
-
-  useEffect(() => { load(); }, [load]);
 
   const handleRouteChange = (orderId: number, route: string) => {
     setAssigned((prev) => ({ ...prev, [orderId]: route }));
