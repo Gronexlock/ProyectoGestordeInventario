@@ -40,10 +40,13 @@ export const DispachPage = () => {
   const [success, setSuccess]   = useState<string | null>(null);
   const [filterPriority, setFilterPriority] = useState<string>("TODAS");
   const [search, setSearch]     = useState("");
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  const load = () => setRefreshKey((k) => k + 1);
 
   useEffect(() => {
     let cancelled = false;
-    const load = async () => {
+    const fetch = async () => {
       setLoading(true);
       await new Promise((r) => setTimeout(r, 500));
       if (!cancelled) {
@@ -51,9 +54,9 @@ export const DispachPage = () => {
         setLoading(false);
       }
     };
-    load();
+    fetch();
     return () => { cancelled = true; };
-  }, []);
+  }, [refreshKey]);
 
   const handleRouteChange = (orderId: number, route: string) => {
     setAssigned((prev) => ({ ...prev, [orderId]: route }));

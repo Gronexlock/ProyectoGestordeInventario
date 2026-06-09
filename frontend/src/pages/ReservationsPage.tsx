@@ -19,10 +19,13 @@ export const ReservationsPage = () => {
   const [actionId, setActionId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  const loadReservations = () => setRefreshKey((k) => k + 1);
 
   useEffect(() => {
     let cancelled = false;
-    const loadReservations = async () => {
+    const fetch = async () => {
       setLoading(true);
       setError(null);
       try {
@@ -34,9 +37,9 @@ export const ReservationsPage = () => {
         if (!cancelled) setLoading(false);
       }
     };
-    loadReservations();
+    fetch();
     return () => { cancelled = true; };
-  }, []);
+  }, [refreshKey]);
 
   const handleRelease = async (reservation: Reservation) => {
     const confirmed = window.confirm(
@@ -56,7 +59,7 @@ export const ReservationsPage = () => {
           ? `La reserva #${reservation.reservationId} ya estaba liberada.`
           : `Reserva #${reservation.reservationId} liberada. Stock disponible: ${result.stockDisponible} uds.`
       );
-      await loadReservations();
+      loadReservations();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Error al liberar");
     } finally {
@@ -78,7 +81,7 @@ export const ReservationsPage = () => {
     try {
       await confirmDelivery(reservation.reservationId);
       setSuccess(`Entrega confirmada — Reserva #${reservation.reservationId} marcada como Vendida.`);
-      await loadReservations();
+      loadReservations();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Error al confirmar entrega");
     } finally {

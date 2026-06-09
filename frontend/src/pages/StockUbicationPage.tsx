@@ -24,10 +24,13 @@ export const StockUbicationPage = () => {
   const [error, setError]         = useState<string | null>(null);
   const [search, setSearch]       = useState("");
   const [filterType, setFilterType] = useState<string>("todos");
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  const load = () => setRefreshKey((k) => k + 1);
 
   useEffect(() => {
     let cancelled = false;
-    const load = async () => {
+    const fetch = async () => {
       setLoading(true);
       setError(null);
       try {
@@ -39,9 +42,9 @@ export const StockUbicationPage = () => {
         if (!cancelled) setLoading(false);
       }
     };
-    load();
+    fetch();
     return () => { cancelled = true; };
-  }, []);
+  }, [refreshKey]);
 
   const types = ["todos", ...Array.from(new Set(locations.map((l) => l.type)))];
 

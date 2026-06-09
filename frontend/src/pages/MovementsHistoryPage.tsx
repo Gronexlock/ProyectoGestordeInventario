@@ -22,6 +22,7 @@ export const MovementsHistoryPage = () => {
   const [movements, setMovements] = useState<Movement[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   // Filtros
   const [filterType, setFilterType] = useState<"all" | MovementType>("all");
@@ -29,9 +30,11 @@ export const MovementsHistoryPage = () => {
   const [filterDateFrom, setFilterDateFrom] = useState("");
   const [filterDateTo, setFilterDateTo] = useState("");
 
+  const loadMovements = () => setRefreshKey((k) => k + 1);
+
   useEffect(() => {
     let cancelled = false;
-    const loadMovements = async () => {
+    const fetch = async () => {
       setLoading(true);
       setError(null);
       try {
@@ -43,9 +46,9 @@ export const MovementsHistoryPage = () => {
         if (!cancelled) setLoading(false);
       }
     };
-    loadMovements();
+    fetch();
     return () => { cancelled = true; };
-  }, []);
+  }, [refreshKey]);
 
   const filtered = movements.filter((m) => {
     if (filterType !== "all" && m.type !== filterType) return false;

@@ -24,10 +24,13 @@ export const StockPage = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  const loadStock = () => setRefreshKey((k) => k + 1);
 
   useEffect(() => {
     let cancelled = false;
-    const loadStock = async () => {
+    const fetch = async () => {
       setLoading(true);
       setError(null);
       try {
@@ -43,9 +46,9 @@ export const StockPage = () => {
         if (!cancelled) setLoading(false);
       }
     };
-    loadStock();
+    fetch();
     return () => { cancelled = true; };
-  }, []);
+  }, [refreshKey]);
 
   const filtered = stock.filter((item) => {
     const matchLocation = selectedLocation === "all" || item.locationId === selectedLocation;
