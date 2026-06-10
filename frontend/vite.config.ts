@@ -14,6 +14,11 @@ export default defineConfig({
         'src/services/alertService.ts',
         'src/services/replenishmentService.ts',
         'src/services/movementService.ts',
+        'src/services/syncService.ts',
+        'src/services/pickingService.ts',
+        'src/services/stockService.ts',
+        'src/services/reservationService.ts',
+        'src/utils/disableNumberInputWheel.ts',
       ],
       thresholds: {
         branches: 100,

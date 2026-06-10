@@ -110,4 +110,49 @@ describe("alertService.syncCriticalAlerts", () => {
       })
     );
   });
+
+  it("actualiza alerta PENDING existente cuando cambia el stock crítico", async () => {
+    prismaMock.stock.findMany.mockResolvedValueOnce([
+      {
+        productId: "prod-1",
+        locationId: "loc-1",
+        quantity: 3,
+        product: { minStock: 10 },
+      },
+    ] as any);
+    prismaMock.stockAlert.findFirst.mockResolvedValueOnce({
+      id: "alert-1",
+      currentStock: 5,
+      minStock: 10,
+    } as any);
+    prismaMock.stockAlert.update.mockResolvedValueOnce({} as any);
+
+    await alertService.syncCriticalAlerts();
+
+    expect(prismaMock.stockAlert.update).toHaveBeenCalledWith({
+      where: { id: "alert-1" },
+      data: { currentStock: 3, minStock: 10 },
+    });
+  });
+
+  it("no actualiza alerta PENDING si los valores ya coinciden", async () => {
+    prismaMock.stock.findMany.mockResolvedValueOnce([
+      {
+        productId: "prod-1",
+        locationId: "loc-1",
+        quantity: 5,
+        product: { minStock: 10 },
+      },
+    ] as any);
+    prismaMock.stockAlert.findFirst.mockResolvedValueOnce({
+      id: "alert-1",
+      currentStock: 5,
+      minStock: 10,
+    } as any);
+
+    await alertService.syncCriticalAlerts();
+
+    expect(prismaMock.stockAlert.update).not.toHaveBeenCalled();
+    expect(prismaMock.stockAlert.create).not.toHaveBeenCalled();
+  });
 });

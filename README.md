@@ -292,27 +292,33 @@ Integración con Grupo 3 (Pedidos): [COORDINACION_GRUPO3.md](./COORDINACION_GRUP
 
 ```bash
 cd backend
-npm run test               # 97 tests, 10 suites
+npm run test               # 101 tests, 10 suites
 npm run test:coverage      # cobertura 100% (statements · branches · funcs · lines)
 ```
 
 | Suite | Tests | Archivos cubiertos |
 |-------|-------|--------------------|
-| Services | 37 | `movement.service.ts`, `alert.service.ts`, `replenishment.service.ts` |
+| Services | 41 | `movement.service.ts`, `alert.service.ts` (+ syncCriticalAlerts), `replenishment.service.ts` |
 | Controllers | 18 | `alert.controller.ts`, `replenishment.controller.ts` |
 | Utils | 5 | `errors.ts` |
 | Location | 12 | `location.service.ts` (priority CRUD + suggestSource) |
 | Sync | 6 | `sync.service.ts` (balance + transfer) |
 | Picking | 8 | `picking.service.ts` (batch pick list) |
 | Payment | 4 | `reservation.service.ts::processPaymentConfirmed` |
+| Alert sync | 4 | `alert.service.ts::syncCriticalAlerts` |
 
 ### Frontend (Vitest · jsdom)
 
 ```bash
 cd frontend
-pnpm test                  # 38 tests, 5 suites
+pnpm test                  # 56 tests, 8 suites
 pnpm test:coverage         # cobertura 100% (statements · branches · funcs · lines)
 ```
+
+| Suite | Archivos cubiertos |
+|-------|--------------------|
+| Services | `alertService`, `movementService`, `replenishmentService`, `syncService`, `pickingService`, `stockService`, `reservationService` |
+| Utils | `disableNumberInputWheel` |
 
 ## 🏛️ Arquitectura
 
