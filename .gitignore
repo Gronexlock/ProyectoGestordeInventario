@@ -4,3 +4,7 @@ node_modules/
 logs/
 coverage/
 dist/
+*.tsbuildinfo
+.vite/
+backend/.claude/
+backend/logs/

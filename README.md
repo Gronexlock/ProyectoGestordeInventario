@@ -6,9 +6,15 @@ Sistema de gestión de inventario para controlar stock en múltiples ubicaciones
 
 ```
 ProyectoAgilEscalado/
-├── backend/    → API REST (Node.js · Express · TypeScript · Prisma · PostgreSQL)
-├── frontend/   → Aplicación web (React · TypeScript · Vite)
+├── backend/              → API REST (Node.js · Express · TypeScript · Prisma · PostgreSQL)
+│   ├── prisma/           → schema + migraciones + seed
+│   └── src/              → controllers · services · routes · middlewares
+├── frontend/             → SPA React (TypeScript · Vite · TanStack Query)
+│   └── src/              → pages · components · services · types
 ├── docker-compose.yml
+├── README.md             → inicio rápido y guía de demo
+├── PENDIENTES.md         → gap analysis y decisiones de diseño
+├── COORDINACION_GRUPO3.md → contrato de integración con sistema de pedidos
 └── .github/workflows/ci.yml
 ```
 
@@ -278,7 +284,7 @@ Body: { "reservationId": 1 }
 | `/external/payment-confirmed` → 503 | Agregar `EXTERNAL_API_KEY` al `.env` y reiniciar |
 | Picking sin órdenes | Confirmar reservas y avanzar órdenes a `READY_FOR_DISPATCH` |
 
-Documentación ampliada del flujo técnico: [FLUJO_PROYECTO.md](./FLUJO_PROYECTO.md) · Integración con Grupo 3: [COORDINACION_GRUPO3.md](./COORDINACION_GRUPO3.md)
+Integración con Grupo 3 (Pedidos): [COORDINACION_GRUPO3.md](./COORDINACION_GRUPO3.md)
 
 ## 🧪 Testing
 
