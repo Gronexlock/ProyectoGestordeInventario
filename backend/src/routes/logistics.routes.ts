@@ -11,7 +11,7 @@ import { param } from "express-validator";
 import * as logisticsController from "../controllers/logistics.controller";
 import { validateRequest } from "../middlewares/validateRequest";
 
-const router = Router();
+const router: ReturnType<typeof Router> = Router();
 
 // ── Reglas de validación ───────────────────────────────────────────
 

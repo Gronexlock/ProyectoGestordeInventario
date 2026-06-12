@@ -10,7 +10,7 @@ import * as reservationController from "../controllers/reservation.controller";
 import { validateRequest } from "../middlewares/validateRequest";
 import { validateApiKey } from "../middlewares/validateApiKey";
 
-const router = Router();
+const router: ReturnType<typeof Router> = Router();
 
 const confirmDeliveryRules = [
   param("id")

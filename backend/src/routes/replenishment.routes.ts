@@ -3,7 +3,7 @@ import { body } from "express-validator";
 import * as replenishmentController from "../controllers/replenishment.controller";
 import { validateRequest } from "../middlewares/validateRequest";
 
-const router = Router();
+const router: ReturnType<typeof Router> = Router();
 
 // Rutas de Proveedores
 router.get("/suppliers", replenishmentController.getSuppliers);

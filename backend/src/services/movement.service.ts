@@ -69,21 +69,24 @@ export const createMovement = async (
     });
 
     const currentQuantity = existingStock?.quantity ?? 0;
+    const currentReserved = existingStock?.reserved ?? 0;
     let newQuantity: number;
 
     if (dto.type === "IN") {
       newQuantity = currentQuantity + dto.quantity;
     } else {
-      // OUT: verificar que no quede negativo
-      newQuantity = currentQuantity - dto.quantity;
+      // OUT: verificar stock libre (físico − reservado)
+      const availableQty = currentQuantity - currentReserved;
 
-      if (newQuantity < 0) {
+      if (dto.quantity > availableQty) {
         throw new AppError(
-          `Stock insuficiente. Stock actual: ${currentQuantity} unidades. ` +
+          `Stock libre insuficiente. Disponible: ${availableQty} (Físico: ${currentQuantity}, Reservado: ${currentReserved}). ` +
           `Se intentaron retirar: ${dto.quantity} unidades.`,
           400
         );
       }
+
+      newQuantity = currentQuantity - dto.quantity;
     }
 
     // 3c. Crear o actualizar el stock (upsert)

@@ -1,6 +1,5 @@
 import type { StockAlert } from "../types/alert";
-
-const API_BASE = "http://localhost:3000/api/v1";
+import { API_BASE } from "../config/apiConfig";
 
 export const getAlerts = async (status?: string): Promise<StockAlert[]> => {
   const url = status ? `${API_BASE}/alerts?status=${status}` : `${API_BASE}/alerts`;

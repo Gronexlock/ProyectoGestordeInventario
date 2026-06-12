@@ -5,9 +5,8 @@
 // ============================================================
 
 import prisma from "../prisma/client";
-import { Prisma } from "@prisma/client";
+import { Prisma, ReservationStatus } from "@prisma/client";
 import { AppError } from "../utils/AppError";
-import { getActiveReservedQuantity } from "./reservation.service";
 
 export interface StockWithAvailability {
   id: string;
@@ -20,26 +19,6 @@ export interface StockWithAvailability {
   location: { id: string; name: string; type: string };
 }
 
-const enrichStockRecord = async (stock: {
-  id: string;
-  productId: string;
-  locationId: string;
-  quantity: number;
-  product: { id: string; name: string; sku: string; minStock: number };
-  location: { id: string; name: string; type: string };
-}): Promise<StockWithAvailability> => {
-  const reserved = await getActiveReservedQuantity(
-    stock.product.sku,
-    stock.locationId
-  );
-
-  return {
-    ...stock,
-    reserved,
-    stockDisponible: stock.quantity - reserved,
-  };
-};
-
 // Tipo del cliente de transacción Prisma
 type TxClient = Prisma.TransactionClient;
 
@@ -49,6 +28,26 @@ interface StockItem {
   locationId: string;
   quantity: number;
 }
+
+/**
+ * Construye un Map de "sku:locationId" → cantidad reservada activa.
+ * Ejecuta un único groupBy (una sola query) para eliminar el patrón N+1.
+ */
+const buildReservedMap = async (filter?: {
+  sku?: string;
+  locationId?: string;
+}): Promise<Map<string, number>> => {
+  const agg = await prisma.reservation.groupBy({
+    by: ["sku", "locationId"],
+    where: {
+      status: ReservationStatus.ACTIVE,
+      ...(filter?.sku && { sku: filter.sku }),
+      ...(filter?.locationId && { locationId: filter.locationId }),
+    },
+    _sum: { quantity: true },
+  });
+  return new Map(agg.map((r) => [`${r.sku}:${r.locationId}`, r._sum.quantity ?? 0]));
+};
 
 // ── Helpers de reserva (solo para uso interno desde OrderService) ─
 
@@ -158,27 +157,34 @@ export const deductStock = async (
 };
 
 /**
- * Devuelve todo el stock actual del sistema, con información
- * de producto, ubicación y stock disponible (quantity − reservado).
+ * Devuelve todo el stock actual del sistema con stock disponible calculado.
+ * Usa una sola query de agregación para reservas (sin patrón N+1).
  */
 export const getAllStock = async (): Promise<StockWithAvailability[]> => {
-  const stocks = await prisma.stock.findMany({
-    orderBy: { quantity: "asc" },
-    include: {
-      product: {
-        select: { id: true, name: true, sku: true, minStock: true },
+  const [stocks, reservedMap] = await Promise.all([
+    prisma.stock.findMany({
+      orderBy: { quantity: "asc" },
+      include: {
+        product: {
+          select: { id: true, name: true, sku: true, minStock: true },
+        },
+        location: {
+          select: { id: true, name: true, type: true },
+        },
       },
-      location: {
-        select: { id: true, name: true, type: true },
-      },
-    },
-  });
+    }),
+    buildReservedMap(),
+  ]);
 
-  return Promise.all(stocks.map(enrichStockRecord));
+  return stocks.map((stock) => {
+    const reserved = reservedMap.get(`${stock.product.sku}:${stock.locationId}`) ?? 0;
+    return { ...stock, reserved, stockDisponible: stock.quantity - reserved };
+  });
 };
 
 /**
  * Devuelve el stock de una ubicación específica con stock disponible.
+ * Usa una sola query de agregación para reservas (sin patrón N+1).
  * @throws AppError 404 si la ubicación no existe
  */
 export const getStockByLocation = async (locationId: string) => {
@@ -193,20 +199,26 @@ export const getStockByLocation = async (locationId: string) => {
     );
   }
 
-  const stocks = await prisma.stock.findMany({
-    where: { locationId },
-    orderBy: { quantity: "asc" },
-    include: {
-      product: {
-        select: { id: true, name: true, sku: true, minStock: true },
+  const [stocks, reservedMap] = await Promise.all([
+    prisma.stock.findMany({
+      where: { locationId },
+      orderBy: { quantity: "asc" },
+      include: {
+        product: {
+          select: { id: true, name: true, sku: true, minStock: true },
+        },
+        location: {
+          select: { id: true, name: true, type: true },
+        },
       },
-      location: {
-        select: { id: true, name: true, type: true },
-      },
-    },
-  });
+    }),
+    buildReservedMap({ locationId }),
+  ]);
 
-  const enriched = await Promise.all(stocks.map(enrichStockRecord));
+  const enriched: StockWithAvailability[] = stocks.map((stock) => {
+    const reserved = reservedMap.get(`${stock.product.sku}:${stock.locationId}`) ?? 0;
+    return { ...stock, reserved, stockDisponible: stock.quantity - reserved };
+  });
 
   return { location, stocks: enriched };
 };
@@ -214,6 +226,7 @@ export const getStockByLocation = async (locationId: string) => {
 /**
  * Sugiere ubicaciones fuente ordenadas por prioridad y stock disponible.
  * SCRUM-69: implementa reglas de prioridad de ubicaciones.
+ * Usa una sola query de agregación para reservas (sin patrón N+1).
  *
  * @param productId UUID del producto
  * @param quantity  Cantidad mínima requerida (opcional, default 1)
@@ -234,28 +247,23 @@ export const suggestSourceLocation = async (
     throw new AppError(`No se encontró un producto con ID "${productId}".`, 404);
   }
 
-  const stocks = await prisma.stock.findMany({
-    where: { productId },
-    include: {
-      location: {
-        select: { id: true, name: true, type: true, priority: true },
+  const [stocks, reservedMap] = await Promise.all([
+    prisma.stock.findMany({
+      where: { productId },
+      include: {
+        location: {
+          select: { id: true, name: true, type: true, priority: true },
+        },
       },
-      product: { select: { id: true, name: true, sku: true } },
-    },
-  });
+    }),
+    buildReservedMap({ sku: product.sku }),
+  ]);
 
-  const enriched = await Promise.all(
-    stocks.map(async (s) => {
-      const reserved = await getActiveReservedQuantity(product.sku, s.locationId);
-      const stockDisponible = s.quantity - reserved;
-      return {
-        location: s.location,
-        quantity: s.quantity,
-        reserved,
-        stockDisponible,
-      };
-    })
-  );
+  const enriched = stocks.map((s) => {
+    const reserved = reservedMap.get(`${product.sku}:${s.locationId}`) ?? 0;
+    const stockDisponible = s.quantity - reserved;
+    return { location: s.location, quantity: s.quantity, reserved, stockDisponible };
+  });
 
   const filtered = enriched.filter((s) => s.stockDisponible >= quantity);
   filtered.sort((a, b) => {

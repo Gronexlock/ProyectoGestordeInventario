@@ -3,8 +3,7 @@ import type {
   ReplenishmentOrder,
   CreateReplenishmentDto,
 } from "../types/replenishment";
-
-const API_BASE = "http://localhost:3000/api/v1";
+import { API_BASE } from "../config/apiConfig";
 
 // Proveedores
 export const getAllSuppliers = async (): Promise<Supplier[]> => {

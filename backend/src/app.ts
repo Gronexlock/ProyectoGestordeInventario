@@ -43,7 +43,11 @@ const limiter = rateLimit({
 app.use("/api", limiter);
 
 // ── Middlewares Globales ─────────────────────────────────────
-app.use(cors());
+app.use(cors({
+  origin: process.env.FRONTEND_URL || "http://localhost:80",
+  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "X-Api-Key", "Authorization"],
+}));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(

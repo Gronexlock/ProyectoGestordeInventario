@@ -12,7 +12,7 @@ import { body, param, query } from "express-validator";
 import * as orderController from "../controllers/order.controller";
 import { validateRequest } from "../middlewares/validateRequest";
 
-const router = Router();
+const router: ReturnType<typeof Router> = Router();
 
 const ORDER_STATUSES = [
   "PENDING",

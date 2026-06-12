@@ -4,9 +4,9 @@
 //           y ejecuta transferencias de balanceo.
 // ============================================================
 
+import { ReservationStatus } from "@prisma/client";
 import prisma from "../prisma/client";
 import { createTransfer } from "./movement.service";
-import { getActiveReservedQuantity } from "./reservation.service";
 
 export type BalanceStatus = "EXCESS" | "DEFICIT" | "OK";
 
@@ -43,20 +43,37 @@ export interface ProductBalance {
 /**
  * Analiza el balance de stock por producto entre ubicaciones.
  * Clasifica cada ubicación como EXCESS, DEFICIT u OK.
+ * Usa una sola query de agregación para reservas activas (sin patrón N+1).
  * SCRUM-68.
  */
 export const getStockBalance = async (): Promise<ProductBalance[]> => {
-  const products = await prisma.product.findMany({
-    include: {
-      stocks: {
-        include: {
-          location: {
-            select: { id: true, name: true, type: true, priority: true },
+  // Dos queries paralelas en lugar de N queries dentro del loop
+  const [products, allActiveReservations] = await Promise.all([
+    prisma.product.findMany({
+      include: {
+        stocks: {
+          include: {
+            location: {
+              select: { id: true, name: true, type: true, priority: true },
+            },
           },
         },
       },
-    },
-  });
+    }),
+    prisma.reservation.groupBy({
+      by: ["sku", "locationId"],
+      where: { status: ReservationStatus.ACTIVE },
+      _sum: { quantity: true },
+    }),
+  ]);
+
+  // Map "sku:locationId" → reservado — lookup O(1) por cada stock
+  const reservedMap = new Map(
+    allActiveReservations.map((r) => [
+      `${r.sku}:${r.locationId}`,
+      r._sum.quantity ?? 0,
+    ])
+  );
 
   const results: ProductBalance[] = [];
 
@@ -66,36 +83,35 @@ export const getStockBalance = async (): Promise<ProductBalance[]> => {
     const totalStock = product.stocks.reduce((sum, s) => sum + s.quantity, 0);
     const avg = totalStock / product.stocks.length;
 
-    const locationBalances: LocationBalance[] = await Promise.all(
-      product.stocks.map(async (s) => {
-        const reserved = await getActiveReservedQuantity(product.sku, s.locationId);
-        const stockDisponible = s.quantity - reserved;
+    // Síncrono ahora — sin await, sin consultas adicionales
+    const locationBalances: LocationBalance[] = product.stocks.map((s) => {
+      const reserved = reservedMap.get(`${product.sku}:${s.locationId}`) ?? 0;
+      const stockDisponible = s.quantity - reserved;
 
-        let status: BalanceStatus = "OK";
-        let suggestedTransferQty = 0;
+      let status: BalanceStatus = "OK";
+      let suggestedTransferQty = 0;
 
-        if (s.quantity <= product.minStock) {
-          status = "DEFICIT";
-          suggestedTransferQty = Math.ceil(avg) - s.quantity;
-        } else if (s.quantity > avg * 1.5 && s.quantity - Math.ceil(avg) > 0) {
-          status = "EXCESS";
-          suggestedTransferQty = s.quantity - Math.ceil(avg);
-        }
+      if (s.quantity <= product.minStock) {
+        status = "DEFICIT";
+        suggestedTransferQty = Math.ceil(avg) - s.quantity;
+      } else if (s.quantity > avg * 1.5 && s.quantity - Math.ceil(avg) > 0) {
+        status = "EXCESS";
+        suggestedTransferQty = s.quantity - Math.ceil(avg);
+      }
 
-        return {
-          locationId: s.locationId,
-          locationName: s.location.name,
-          locationType: s.location.type,
-          priority: s.location.priority,
-          quantity: s.quantity,
-          reserved,
-          stockDisponible,
-          average: Math.round(avg * 10) / 10,
-          status,
-          suggestedTransferQty: Math.max(0, suggestedTransferQty),
-        };
-      })
-    );
+      return {
+        locationId: s.locationId,
+        locationName: s.location.name,
+        locationType: s.location.type,
+        priority: s.location.priority,
+        quantity: s.quantity,
+        reserved,
+        stockDisponible,
+        average: Math.round(avg * 10) / 10,
+        status,
+        suggestedTransferQty: Math.max(0, suggestedTransferQty),
+      };
+    });
 
     const excesses = locationBalances.filter((l) => l.status === "EXCESS");
     const deficits = locationBalances.filter((l) => l.status === "DEFICIT");

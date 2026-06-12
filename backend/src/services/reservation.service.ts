@@ -4,7 +4,7 @@
 // SCRUM-33: confirmación de entrega → estado SOLD + movimiento OUT
 // ============================================================
 
-import { ReservationStatus, MovementType } from "@prisma/client";
+import { ReservationStatus, MovementType, Prisma } from "@prisma/client";
 import prisma from "../prisma/client";
 import { AppError } from "../utils/AppError";
 import { config } from "../config/config";
@@ -63,6 +63,11 @@ export const getStockDisponible = async (
  * Mock Proyecto 3 — crea reserva bloqueando stock disponible (no quantity físico).
  */
 export const createReservation = async (dto: CreateReservationDto) => {
+  // === 0. VALIDACIÓN TEMPRANA DE CANTIDAD (antes de cualquier query) ===
+  if (dto.quantity <= 0) {
+    throw new AppError("La cantidad debe ser mayor a cero.", 400);
+  }
+
   const [product, location] = await Promise.all([
     prisma.product.findUnique({ where: { sku: dto.sku } }),
     prisma.location.findUnique({ where: { id: dto.locationId } }),
@@ -123,35 +128,53 @@ export const createReservation = async (dto: CreateReservationDto) => {
     );
   }
 
-  if (dto.quantity <= 0) {
-    throw new AppError("La cantidad debe ser mayor a cero.", 400);
-  }
+  // === 3. VERIFICACIÓN DE STOCK Y CREACIÓN ATÓMICA (transacción Serializable) ===
+  // Evita race condition TOCTOU: la lectura de disponibilidad y la escritura de la
+  // reserva ocurren como una unidad indivisible. Con isolationLevel Serializable,
+  // dos transacciones concurrentes sobre el mismo stock no pueden ambas aprobar
+  // la verificación de disponibilidad simultáneamente.
+  const reservation = await prisma.$transaction(async (tx) => {
+    const stock = await tx.stock.findUnique({
+      where: {
+        productId_locationId: { productId: product.id, locationId: dto.locationId },
+      },
+    });
 
-  const { stockDisponible } = await getStockDisponible(dto.sku, dto.locationId);
+    const reservedAgg = await tx.reservation.aggregate({
+      where: { sku: dto.sku, locationId: dto.locationId, status: ReservationStatus.ACTIVE },
+      _sum: { quantity: true },
+    });
 
-  if (dto.quantity > stockDisponible) {
-    throw new AppError(
-      `Stock disponible insuficiente. Disponible: ${stockDisponible}, solicitado: ${dto.quantity}.`,
-      400
-    );
-  }
+    const physicalQty = stock?.quantity ?? 0;
+    const reserved = reservedAgg._sum.quantity ?? 0;
+    const stockDisponible = physicalQty - reserved;
 
-  const expiresAt = dto.expiresAt
-    ? new Date(dto.expiresAt)
-    : new Date(Date.now() + 24 * 60 * 60 * 1000);
+    if (dto.quantity > stockDisponible) {
+      throw new AppError(
+        `Stock disponible insuficiente. Disponible: ${stockDisponible}, solicitado: ${dto.quantity}.`,
+        400
+      );
+    }
 
-  const reservation = await prisma.reservation.create({
-    data: {
-      orderId: dto.orderId,
-      sku: dto.sku,
-      locationId: dto.locationId,
-      quantity: dto.quantity,
-      expiresAt,
-      status: ReservationStatus.ACTIVE,
-    },
-    include: {
-      location: { select: { id: true, name: true, type: true } },
-    },
+    const expiresAt = dto.expiresAt
+      ? new Date(dto.expiresAt)
+      : new Date(Date.now() + 24 * 60 * 60 * 1000);
+
+    return tx.reservation.create({
+      data: {
+        orderId: dto.orderId,
+        sku: dto.sku,
+        locationId: dto.locationId,
+        quantity: dto.quantity,
+        expiresAt,
+        status: ReservationStatus.ACTIVE,
+      },
+      include: {
+        location: { select: { id: true, name: true, type: true } },
+      },
+    });
+  }, {
+    isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
   });
 
   const availability = await getStockDisponible(dto.sku, dto.locationId);
@@ -314,7 +337,10 @@ export const confirmDelivery = async (
         locationId: reservation.locationId,
         quantity: newQuantity,
       },
-      update: { quantity: newQuantity },
+      update: {
+        quantity: newQuantity,
+        reserved: { decrement: reservation.quantity },
+      },
     });
 
     const soldAt = dto?.deliveredAt ? new Date(dto.deliveredAt) : new Date();

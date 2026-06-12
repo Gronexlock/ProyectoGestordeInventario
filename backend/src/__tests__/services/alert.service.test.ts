@@ -16,10 +16,6 @@ const mockAlert = {
 };
 
 describe("alertService.findAlerts", () => {
-  beforeEach(() => {
-    prismaMock.stock.findMany.mockResolvedValue([]);
-  });
-
   it("retorna todas las alertas sin filtro", async () => {
     prismaMock.stockAlert.findMany.mockResolvedValueOnce([mockAlert] as any);
 
@@ -61,7 +57,7 @@ describe("alertService.resolveAlertById", () => {
 });
 
 describe("alertService.syncCriticalAlerts", () => {
-  it("crea alerta PENDING cuando el stock físico está en o bajo el mínimo", async () => {
+  it("crea alerta PENDING en lote cuando el stock físico está en o bajo el mínimo", async () => {
     prismaMock.stock.findMany.mockResolvedValueOnce([
       {
         productId: "prod-1",
@@ -70,23 +66,27 @@ describe("alertService.syncCriticalAlerts", () => {
         product: { minStock: 5 },
       },
     ] as any);
-    prismaMock.stockAlert.findFirst.mockResolvedValueOnce(null);
-    prismaMock.stockAlert.create.mockResolvedValueOnce({} as any);
+    // Sin alertas PENDING existentes
+    prismaMock.stockAlert.findMany.mockResolvedValueOnce([] as any);
+    prismaMock.stockAlert.createMany.mockResolvedValueOnce({ count: 1 });
 
     await alertService.syncCriticalAlerts();
 
-    expect(prismaMock.stockAlert.create).toHaveBeenCalledWith({
-      data: {
-        productId: "prod-1",
-        locationId: "loc-1",
-        currentStock: 5,
-        minStock: 5,
-        status: "PENDING",
-      },
+    expect(prismaMock.stockAlert.createMany).toHaveBeenCalledWith({
+      data: [
+        {
+          productId: "prod-1",
+          locationId: "loc-1",
+          currentStock: 5,
+          minStock: 5,
+          status: "PENDING",
+        },
+      ],
+      skipDuplicates: true,
     });
   });
 
-  it("resuelve alertas PENDING cuando el stock supera el mínimo", async () => {
+  it("resuelve alertas PENDING en lote cuando el stock supera el mínimo", async () => {
     prismaMock.stock.findMany.mockResolvedValueOnce([
       {
         productId: "prod-1",
@@ -95,17 +95,20 @@ describe("alertService.syncCriticalAlerts", () => {
         product: { minStock: 5 },
       },
     ] as any);
+    // Alerta PENDING existente para ese stock
+    prismaMock.stockAlert.findMany.mockResolvedValueOnce([
+      { id: "alert-1", productId: "prod-1", locationId: "loc-1", currentStock: 5, minStock: 5 },
+    ] as any);
     prismaMock.stockAlert.updateMany.mockResolvedValueOnce({ count: 1 });
 
     await alertService.syncCriticalAlerts();
 
     expect(prismaMock.stockAlert.updateMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: {
-          productId: "prod-1",
-          locationId: "loc-1",
+        where: expect.objectContaining({
           status: "PENDING",
-        },
+          OR: [{ productId: "prod-1", locationId: "loc-1" }],
+        }),
         data: expect.objectContaining({ status: "RESOLVED" }),
       })
     );
@@ -120,11 +123,10 @@ describe("alertService.syncCriticalAlerts", () => {
         product: { minStock: 10 },
       },
     ] as any);
-    prismaMock.stockAlert.findFirst.mockResolvedValueOnce({
-      id: "alert-1",
-      currentStock: 5,
-      minStock: 10,
-    } as any);
+    // Alerta existente con stock desactualizado
+    prismaMock.stockAlert.findMany.mockResolvedValueOnce([
+      { id: "alert-1", productId: "prod-1", locationId: "loc-1", currentStock: 5, minStock: 10 },
+    ] as any);
     prismaMock.stockAlert.update.mockResolvedValueOnce({} as any);
 
     await alertService.syncCriticalAlerts();
@@ -144,15 +146,14 @@ describe("alertService.syncCriticalAlerts", () => {
         product: { minStock: 10 },
       },
     ] as any);
-    prismaMock.stockAlert.findFirst.mockResolvedValueOnce({
-      id: "alert-1",
-      currentStock: 5,
-      minStock: 10,
-    } as any);
+    // Alerta existente con los mismos valores
+    prismaMock.stockAlert.findMany.mockResolvedValueOnce([
+      { id: "alert-1", productId: "prod-1", locationId: "loc-1", currentStock: 5, minStock: 10 },
+    ] as any);
 
     await alertService.syncCriticalAlerts();
 
     expect(prismaMock.stockAlert.update).not.toHaveBeenCalled();
-    expect(prismaMock.stockAlert.create).not.toHaveBeenCalled();
+    expect(prismaMock.stockAlert.createMany).not.toHaveBeenCalled();
   });
 });
