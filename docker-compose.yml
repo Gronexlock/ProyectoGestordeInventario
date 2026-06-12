@@ -31,6 +31,8 @@ services:
       DATABASE_URL: postgresql://${POSTGRES_USER:-inventario}:${POSTGRES_PASSWORD:-inventario123}@postgres:5432/${POSTGRES_DB:-inventario_db}
       NODE_ENV: production
       PORT: 3000
+      EXTERNAL_API_KEY: ${EXTERNAL_API_KEY:-dev-api-key-change-in-production}
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:80}
     ports:
       - "3000:3000"
     depends_on:

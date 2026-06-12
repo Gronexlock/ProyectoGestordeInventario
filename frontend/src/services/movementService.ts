@@ -1,6 +1,5 @@
 import type { CreateMovementDto, Movement } from "../types/movement";
-
-const API_BASE = "http://localhost:3000/api/v1";
+import { API_BASE } from "../config/apiConfig";
 
 export const createMovement = async (dto: CreateMovementDto): Promise<Movement> => {
   const response = await fetch(`${API_BASE}/movements`, {

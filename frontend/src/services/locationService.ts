@@ -1,6 +1,5 @@
 import type { CreateLocationDto, Location } from "../types/location";
-
-const API_BASE = "http://localhost:3000/api/v1";
+import { API_BASE } from "../config/apiConfig";
 
 export const createLocation = async (dto: CreateLocationDto): Promise<Location> => {
   const response = await fetch(`${API_BASE}/locations`, {
