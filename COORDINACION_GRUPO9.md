@@ -220,7 +220,43 @@ Cuando tengamos el primer entorno conectado, validar juntos:
 
 ---
 
-Quedamos atentos a sus respuestas. Con esto cerrado podemos empezar implementación sin ambigüedades.
+## 9. Guía de Pruebas Locales (Cómo validar del lado de Inventario)
+
+Para confirmar el envío correcto y verificar la integración, sigue estos pasos:
+
+### Paso 1: Configurar la URL en el entorno
+Asegúrate de configurar la URL del endpoint del Grupo 9 en tu archivo `backend/.env`:
+```env
+ANALYTICS_EVENTS_URL=https://analisis-proyecto-ti.onrender.com/v1/events
+```
+
+### Paso 2: Levantar el servidor
+Arranca la aplicación. El worker de eventos (outbox) se ejecutará en segundo plano procesando la cola de forma periódica:
+```powershell
+npm.cmd run dev --prefix backend
+```
+
+### Paso 3: Provocar eventos en el sistema
+Usa la interfaz web o realiza peticiones HTTP directas a nuestra API para registrar transacciones:
+- **Llegada de Mercancía (`stock_received`)**: Registra un movimiento de entrada o completa una orden de reposición (`RECEIVED`).
+- **Crear Reserva (`stock_reserved`)**: Llama a `POST /api/v1/reservations`.
+- **Confirmar Entrega (`stock_dispatched`)**: Confirma la entrega de una reserva activa.
+- **Ajuste de Stock (`stock_adjusted`)**: Registra una conciliación de stock que altere el balance (ej. una reducción para forzar una cantidad negativa).
+- **Transferencia (`stock_transfer_initiated`)**: Realiza una transferencia entre ubicaciones distintas.
+- **Alertas Críticas (`critical_threshold_reached` / `stock_out_error`)**: Realiza un despacho o transferencia que baje el stock por debajo del mínimo (o a `0` para gatillar el `stock_out_error`).
+
+### Paso 4: Consultar la Cola Outbox
+Revisa el estado de la cola en nuestro backend consultando:
+```http
+GET http://localhost:3000/api/v1/events/outbox
+```
+- El estado (`status`) de los eventos debe cambiar de `PENDING` a `SENT` tras unos segundos.
+- Si ocurre algún error en la conexión o validación del payload, el estado cambiará a `FAILED` o `DEAD`, mostrando el error detallado en `lastError`.
+
+### Paso 5: Confirmar en Analítica
+Usa el token Keycloak detallado en la **Sección 1** para consultar los endpoints del Grupo 9 y validar que los datos enviados impactaron su base de datos.
+
+---
 
 Saludos,
 **Equipo Inventario — Grupo 5**

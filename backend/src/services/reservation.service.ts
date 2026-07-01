@@ -201,6 +201,8 @@ export const createReservation = async (dto: CreateReservationDto) => {
     locationId,
     quantity: dto.quantity,
     orderId: dto.orderId,
+    createdAt: (reservation.createdAt ?? new Date()).toISOString(),
+    expiresAt: (reservation.expiresAt ?? new Date()).toISOString(),
   });
 
   return { reservation, ...availability };
@@ -242,6 +244,7 @@ export const expireStaleReservations = async (): Promise<number> => {
       locationId: r.locationId,
       quantity: r.quantity,
       reason: "EXPIRED",
+      orderId: r.orderId ?? undefined,
     });
   }
 
@@ -326,6 +329,7 @@ export const cancelAndReleaseReservation = async (
     locationId: updated.locationId,
     quantity: updated.quantity,
     reason: "RELEASED",
+    orderId: updated.orderId ?? undefined,
   });
 
   return { reservation: updated, ...availability, alreadyReleased: false };
@@ -341,7 +345,7 @@ export const confirmDelivery = async (
   const reservation = await prisma.reservation.findUnique({
     where: { reservationId },
     include: {
-      location: { select: { id: true, name: true } },
+      location: { select: { id: true, name: true, type: true, city: true } },
     },
   });
 
@@ -439,7 +443,7 @@ export const confirmDelivery = async (
         soldAt,
       },
       include: {
-        location: { select: { id: true, name: true } },
+        location: { select: { id: true, name: true, type: true, city: true } },
       },
     });
 
@@ -448,7 +452,7 @@ export const confirmDelivery = async (
 
   let alert: string | undefined;
 
-  if (result.newQuantity <= config.criticalStockThreshold) {
+  if (result.newQuantity <= product.minStock) {
     alert =
       `⚠️ STOCK CRÍTICO: "${product.name}" (SKU: ${product.sku}) ` +
       `en "${reservation.location.name}" tiene solo ${result.newQuantity} unidades.`;
@@ -457,6 +461,19 @@ export const confirmDelivery = async (
     console.warn(`   Producto:  ${product.name} (${product.sku})`);
     console.warn(`   Ubicación: ${reservation.location.name}`);
     console.warn(`   Stock:     ${result.newQuantity} unidades\n`);
+
+    void eventService.emitCriticalThreshold({
+      alertId: result.movement.id,
+      sku: product.sku,
+      locationId: reservation.locationId,
+      currentStock: result.newQuantity,
+      minStock: product.minStock,
+      thresholdLimite: product.minStock,
+      productName: product.name,
+      locationName: result.reservation.location.name,
+      locationType: result.reservation.location.type,
+      city: result.reservation.location.city ?? undefined,
+    });
   }
 
   const availability = await getStockDisponible(

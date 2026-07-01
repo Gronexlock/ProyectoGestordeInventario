@@ -199,6 +199,55 @@ describe("eventService.emit helpers", () => {
     const payload = call.data.payload as Record<string, unknown>;
     expect(payload.threshold_limite).toBe(15);
   });
+
+  it("toUUIDv4 convierte correctamente un entero a UUID v4 determinista", () => {
+    const uuid = eventService.toUUIDv4(42);
+    expect(uuid).toBe("00000000-0000-4000-8000-00000000002a");
+  });
+
+  it("emitStockMovement usa quantity_received y received_at para stock_received", async () => {
+    await eventService.emitStockMovement({
+      eventType: "stock_received",
+      sku: "SKU-TEST-1",
+      locationId: "loc-test-1",
+      quantity: 120,
+      receivedAt: "2026-06-30T10:00:00Z",
+    });
+    const call = prismaMock.outboundEvent.create.mock.calls[0][0];
+    const payload = call.data.payload as any;
+    expect(call.data.eventType).toBe("stock_received");
+    expect(payload.quantity_received).toBe(120);
+    expect(payload.received_at).toBe("2026-06-30T10:00:00Z");
+    expect(payload.quantity).toBeUndefined();
+  });
+
+  it("emitStockMovement incluye destination_id para stock_transfer_initiated", async () => {
+    await eventService.emitStockMovement({
+      eventType: "stock_transfer_initiated",
+      sku: "SKU-TEST-1",
+      locationId: "loc-test-1",
+      destinationId: "loc-dest-1",
+      quantity: 50,
+    });
+    const call = prismaMock.outboundEvent.create.mock.calls[0][0];
+    const payload = call.data.payload as any;
+    expect(call.data.eventType).toBe("stock_transfer_initiated");
+    expect(payload.destination_id).toBe("loc-dest-1");
+  });
+
+  it("emitCriticalThreshold usa stock_out_error si currentStock es 0", async () => {
+    await eventService.emitCriticalThreshold({
+      alertId: "alert-out",
+      sku: "SKU-OUT",
+      locationId: "loc-out",
+      currentStock: 0,
+      minStock: 10,
+    });
+    const call = prismaMock.outboundEvent.create.mock.calls[0][0];
+    const payload = call.data.payload as any;
+    expect(call.data.eventType).toBe("stock_out_error");
+    expect(payload.current_stock).toBe(0);
+  });
 });
 
 describe("eventService.listOutboundEvents", () => {

@@ -13,10 +13,13 @@ const BACKOFF_MS = [30_000, 60_000, 300_000, 900_000, 3_600_000];
 const buildEnvelope = (eventType: string, payload: Record<string, unknown>) => ({
   source: "inventory",
   event_type: eventType,
-  project_id: "proyecto-09",
-  created_at: new Date().toISOString(),
   payload,
 });
+
+export const toUUIDv4 = (id: number): string => {
+  const hex = id.toString(16).padStart(12, "0");
+  return `00000000-0000-4000-8000-${hex}`;
+};
 
 export const enqueueEvent = async (
   eventType: string,
@@ -158,22 +161,37 @@ export const emitStockMovement = async (params: {
   movementId?: string;
   /** Desbloquea reserved_stock en Grupo 9 (prioridad 2) — requerido en stock_dispatched */
   orderId?: string;
+  destinationId?: string;
+  receivedAt?: string;
 }) => {
+  const payload: Record<string, unknown> = {
+    sku_id: params.sku,
+    location_id: params.locationId,
+  };
+
+  if (params.eventType === "stock_received") {
+    payload.quantity_received = params.quantity;
+    payload.received_at = params.receivedAt ?? new Date().toISOString();
+  } else {
+    payload.quantity = params.quantity;
+  }
+
+  if (params.eventType === "stock_transfer_initiated" && params.destinationId !== undefined) {
+    payload.destination_id = params.destinationId;
+  }
+
+  if (params.unitPrice !== undefined) payload.unit_price = params.unitPrice;
+  if (params.category !== undefined) payload.category = params.category;
+  if (params.unit !== undefined) payload.unit = params.unit;
+  if (params.productName !== undefined) payload.product_name = params.productName;
+  if (params.locationName !== undefined) payload.location_name = params.locationName;
+  if (params.locationType !== undefined) payload.location_type = params.locationType;
+  if (params.movementId !== undefined) payload.movement_id = params.movementId;
+  if (params.orderId !== undefined) payload.order_id = params.orderId;
+
   await enqueueEvent(
     params.eventType,
-    {
-      sku_id: params.sku,
-      location_id: params.locationId,
-      quantity: params.quantity,
-      ...(params.unitPrice !== undefined && { unit_price: params.unitPrice }),
-      ...(params.category !== undefined && { category: params.category }),
-      ...(params.unit !== undefined && { unit: params.unit }),
-      ...(params.productName !== undefined && { product_name: params.productName }),
-      ...(params.locationName !== undefined && { location_name: params.locationName }),
-      ...(params.locationType !== undefined && { location_type: params.locationType }),
-      ...(params.movementId !== undefined && { movement_id: params.movementId }),
-      ...(params.orderId !== undefined && { order_id: params.orderId }),
-    },
+    payload,
     params.movementId ? `${params.eventType}:${params.movementId}` : undefined
   );
 };
@@ -184,15 +202,19 @@ export const emitStockReserved = async (params: {
   locationId: string;
   quantity: number;
   orderId: string;
+  createdAt?: string;
+  expiresAt?: string;
 }) => {
   await enqueueEvent(
     "stock_reserved",
     {
+      reservation_id: toUUIDv4(params.reservationId),
+      order_id: params.orderId,
       sku_id: params.sku,
       location_id: params.locationId,
       quantity: params.quantity,
-      order_id: params.orderId,
-      reservation_id: params.reservationId,
+      created_at: params.createdAt ?? new Date().toISOString(),
+      expires_at: params.expiresAt ?? new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
     },
     `stock_reserved:${params.reservationId}`
   );
@@ -204,17 +226,21 @@ export const emitStockReleased = async (params: {
   locationId: string;
   quantity: number;
   reason: "RELEASED" | "EXPIRED";
+  /** order_id requerido por Grupo 9 para restar de reserved_stock */
+  orderId?: string;
 }) => {
+  // El Grupo 9 no acepta "stock_released" como event_type.
+  // Se usa "stock_dispatched" con el mismo order_id de la reserva,
+  // lo que permite al Grupo 9 restar del reserved_stock correctamente.
   await enqueueEvent(
-    "stock_released",
+    "stock_dispatched",
     {
       sku_id: params.sku,
       location_id: params.locationId,
       quantity: params.quantity,
-      reservation_id: params.reservationId,
-      reason: params.reason,
+      ...(params.orderId !== undefined && { order_id: params.orderId }),
     },
-    `stock_released:${params.reservationId}:${params.reason}`
+    `stock_dispatched:release:${params.reservationId}:${params.reason}`
   );
 };
 
@@ -232,8 +258,9 @@ export const emitCriticalThreshold = async (params: {
   /** Ciudad de la ubicación — desbloquea mapa geográfico en Grupo 9 (prioridad 3) */
   city?: string;
 }) => {
+  const eventType = params.currentStock === 0 ? "stock_out_error" : "critical_threshold_reached";
   await enqueueEvent(
-    "critical_threshold_reached",
+    eventType,
     {
       sku_id: params.sku,
       location_id: params.locationId,
@@ -245,6 +272,6 @@ export const emitCriticalThreshold = async (params: {
       ...(params.city !== undefined && { city: params.city }),
       alert_id: params.alertId,
     },
-    `critical_threshold:${params.alertId}`
+    `${eventType}:${params.alertId}`
   );
 };

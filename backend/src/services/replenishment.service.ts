@@ -108,8 +108,12 @@ export const updateOrderStatus = async (id: string, status: string) => {
         sku: order.product.sku,
         locationId: order.locationId,
         quantity: order.quantity,
+        unitPrice: order.product.price ?? undefined,
+        category: order.product.category ?? undefined,
+        unit: order.product.unit ?? undefined,
         productName: order.product.name,
         movementId: undefined,
+        receivedAt: new Date().toISOString(),
       });
       return updatedOrder;
     });

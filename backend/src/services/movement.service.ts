@@ -181,7 +181,7 @@ export const createMovement = async (
     eventType,
     sku: product.sku,
     locationId: dto.locationId,
-    quantity: dto.quantity,
+    quantity: eventType === "stock_adjusted" && dto.type === "OUT" ? -dto.quantity : dto.quantity,
     unitPrice: product.price ?? undefined,
     category: product.category ?? undefined,
     unit: product.unit ?? undefined,
@@ -189,6 +189,7 @@ export const createMovement = async (
     locationName: location.name,
     locationType: location.type,
     movementId: result.movement.id,
+    receivedAt: eventType === "stock_received" ? result.movement.createdAt.toISOString() : undefined,
   });
 
   if (dto.type === "OUT" && result.newQuantity <= product.minStock) {
@@ -400,12 +401,13 @@ export const createTransfer = async (dto: {
       });
     }
 
-    return { movOut, movIn };
+    return { movOut, movIn, newSourceQty };
   }).then(async (result) => {
     void eventService.emitStockMovement({
       eventType: "stock_transfer_initiated",
       sku: product.sku,
       locationId: dto.sourceLocationId,
+      destinationId: dto.destinationLocationId,
       quantity: dto.quantity,
       unitPrice: product.price ?? undefined,
       category: product.category ?? undefined,
@@ -415,7 +417,23 @@ export const createTransfer = async (dto: {
       locationType: sourceLoc.type,
       movementId: result.movOut.id,
     });
-    return result;
+
+    if (result.newSourceQty <= product.minStock) {
+      void eventService.emitCriticalThreshold({
+        alertId: result.movOut.id,
+        sku: product.sku,
+        locationId: dto.sourceLocationId,
+        currentStock: result.newSourceQty,
+        minStock: product.minStock,
+        thresholdLimite: product.minStock,
+        productName: product.name,
+        locationName: sourceLoc.name,
+        locationType: sourceLoc.type,
+        city: sourceLoc.city ?? undefined,
+      });
+    }
+
+    return { movOut: result.movOut, movIn: result.movIn };
   });
 };
 
