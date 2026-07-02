@@ -5,8 +5,12 @@ import { AppError } from "../../utils/AppError";
 
 jest.mock("../../services/order.service");
 jest.mock("../../services/stock.service");
+jest.mock("../../services/event.service");
 
 import * as stockService from "../../services/stock.service";
+import * as eventService from "../../services/event.service";
+
+const mockedEmitStockReleased = eventService.emitStockReleased as jest.MockedFunction<typeof eventService.emitStockReleased>;
 
 const mockedSuggestBySku = stockService.suggestSourceLocationBySku as jest.MockedFunction<
   typeof stockService.suggestSourceLocationBySku
@@ -160,6 +164,23 @@ describe("reservationService.cancelAndReleaseReservation", () => {
     expect(prismaMock.reservation.update).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({ status: "RELEASED" }),
+      })
+    );
+  });
+
+  it("emite stock_dispatched con orderId al liberar reserva ACTIVE (integración Grupo 9)", async () => {
+    mockedEmitStockReleased.mockResolvedValueOnce(undefined);
+    prismaMock.reservation.findUnique.mockResolvedValueOnce(makeReservation("ACTIVE") as any);
+    prismaMock.reservation.update.mockResolvedValueOnce(makeReservation("RELEASED") as any);
+    setupGetStockDisponibleMocks(50);
+
+    await reservationService.cancelAndReleaseReservation({ reservationId: 1 });
+
+    expect(mockedEmitStockReleased).toHaveBeenCalledWith(
+      expect.objectContaining({
+        reservationId: 1,
+        reason: "RELEASED",
+        orderId: "550e8400-e29b-41d4-a716-446655440000",
       })
     );
   });
@@ -348,6 +369,46 @@ describe("reservationService.expireStaleReservations", () => {
       expect.objectContaining({
         where: { reservationId: { in: [1, 2] } },
         data: expect.objectContaining({ status: "EXPIRED" }),
+      })
+    );
+  });
+
+  it("emite stock_dispatched con orderId por cada reserva expirada (integración Grupo 9)", async () => {
+    mockedEmitStockReleased.mockResolvedValue(undefined);
+    prismaMock.reservation.findMany.mockResolvedValueOnce([
+      {
+        reservationId: 10,
+        sku: "SKU-001",
+        locationId: "loc-1",
+        quantity: 3,
+        orderId: "550e8400-e29b-41d4-a716-446655440000",
+      },
+      {
+        reservationId: 11,
+        sku: "SKU-002",
+        locationId: "loc-2",
+        quantity: 5,
+        orderId: null,
+      },
+    ] as any);
+    prismaMock.reservation.updateMany.mockResolvedValueOnce({ count: 2 } as any);
+
+    await reservationService.expireStaleReservations();
+
+    // Primera reserva: con orderId
+    expect(mockedEmitStockReleased).toHaveBeenCalledWith(
+      expect.objectContaining({
+        reservationId: 10,
+        reason: "EXPIRED",
+        orderId: "550e8400-e29b-41d4-a716-446655440000",
+      })
+    );
+    // Segunda reserva: orderId null → undefined
+    expect(mockedEmitStockReleased).toHaveBeenCalledWith(
+      expect.objectContaining({
+        reservationId: 11,
+        reason: "EXPIRED",
+        orderId: undefined,
       })
     );
   });

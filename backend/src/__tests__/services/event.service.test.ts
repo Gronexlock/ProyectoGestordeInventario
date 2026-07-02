@@ -133,7 +133,7 @@ describe("eventService.emit helpers", () => {
     );
   });
 
-  it("emitStockReleased encola evento stock_released", async () => {
+  it("emitStockReleased encola evento stock_dispatched (Grupo 9 no acepta stock_released)", async () => {
     await eventService.emitStockReleased({
       reservationId: 7,
       sku: "SKU-1",
@@ -142,8 +142,42 @@ describe("eventService.emit helpers", () => {
       reason: "EXPIRED",
     });
     expect(prismaMock.outboundEvent.create).toHaveBeenCalledWith(
-      expect.objectContaining({ data: expect.objectContaining({ eventType: "stock_released" }) })
+      expect.objectContaining({ data: expect.objectContaining({ eventType: "stock_dispatched" }) })
     );
+  });
+
+  it("emitStockReleased incluye order_id en el payload cuando se proporciona orderId", async () => {
+    await eventService.emitStockReleased({
+      reservationId: 8,
+      sku: "SKU-1",
+      locationId: "loc-1",
+      quantity: 3,
+      reason: "RELEASED",
+      orderId: "550e8400-e29b-41d4-a716-446655440099",
+    });
+    expect(prismaMock.outboundEvent.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          eventType: "stock_dispatched",
+          payload: expect.objectContaining({
+            order_id: "550e8400-e29b-41d4-a716-446655440099",
+          }),
+        }),
+      })
+    );
+  });
+
+  it("emitStockReleased NO incluye order_id en el payload si no se proporciona orderId", async () => {
+    await eventService.emitStockReleased({
+      reservationId: 9,
+      sku: "SKU-1",
+      locationId: "loc-1",
+      quantity: 2,
+      reason: "EXPIRED",
+    });
+    const call = prismaMock.outboundEvent.create.mock.calls[0][0];
+    const payload = call.data.payload as Record<string, unknown>;
+    expect(payload).not.toHaveProperty("order_id");
   });
 
   it("emitCriticalThreshold encola evento critical_threshold_reached", async () => {
