@@ -25,6 +25,9 @@ const options: swaggerJsdoc.Options = {
         "Maneja stock, movimientos, reservas, transferencias y pedidos en múltiples ubicaciones.",
     },
     servers: [
+      ...(process.env.BACKEND_URL
+        ? [{ url: `${process.env.BACKEND_URL}/api/v1`, description: "Servidor de producción" }]
+        : []),
       {
         url: "http://localhost:3000/api/v1",
         description: "Servidor de desarrollo",

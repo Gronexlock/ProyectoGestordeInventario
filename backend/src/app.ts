@@ -45,8 +45,19 @@ const limiter = rateLimit({
 app.use("/api", limiter);
 
 // ── Middlewares Globales ─────────────────────────────────────
+const allowedOrigins = (process.env.FRONTEND_URL ?? "http://localhost:5173,http://localhost:80")
+  .split(",")
+  .map((o) => o.trim());
+
 app.use(cors({
-  origin: process.env.FRONTEND_URL || "http://localhost:80",
+  origin: (origin, callback) => {
+    // Permite peticiones sin Origin (Postman, curl, servicios server-to-server)
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error(`CORS: Origen no permitido: ${origin}`));
+    }
+  },
   methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
   allowedHeaders: ["Content-Type", "X-Api-Key", "Authorization"],
 }));
