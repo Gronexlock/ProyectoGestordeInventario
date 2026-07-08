@@ -2,6 +2,19 @@ import prismaMock from "../__mocks__/prismaClient";
 import * as movementService from "../../services/movement.service";
 import { AppError } from "../../utils/AppError";
 
+// ─── Mocks de servicios externos ─────────────────────────────────────────────
+jest.mock("../../services/event.service", () => ({
+  emitStockMovement: jest.fn().mockResolvedValue(undefined),
+  emitCriticalThreshold: jest.fn().mockResolvedValue(undefined),
+}));
+
+jest.mock("../../services/incident.service", () => ({
+  notifyIncident: jest.fn(),
+}));
+
+import { notifyIncident } from "../../services/incident.service";
+const mockNotifyIncident = notifyIncident as jest.MockedFunction<typeof notifyIncident>;
+
 // ─── Fixtures ────────────────────────────────────────────────────────────────
 
 const mockProduct = {
@@ -284,6 +297,119 @@ describe("movementService.createMovement", () => {
     });
 
     expect(alertCreate).not.toHaveBeenCalled();
+  });
+
+  it("OUT con stock crítico llama a notifyIncident con critical_threshold_reached", async () => {
+    mockNotifyIncident.mockClear();
+    prismaMock.product.findUnique.mockResolvedValueOnce(mockProduct as any);
+    prismaMock.location.findUnique.mockResolvedValueOnce(mockLocationOpen as any);
+
+    const updatedStock = { ...mockStock, quantity: 5 }; // 5 ≤ minStock(10)
+    const createdMovement = { ...mockMovement, type: "OUT" as const };
+
+    prismaMock.$transaction.mockImplementationOnce(async (fn: any) => {
+      const txMock = {
+        stock: {
+          findUnique: jest.fn().mockResolvedValue({ ...mockStock, quantity: 50 }),
+          upsert: jest.fn().mockResolvedValue(updatedStock),
+        },
+        movement: { create: jest.fn().mockResolvedValue(createdMovement) },
+        stockAlert: {
+          findFirst: jest.fn().mockResolvedValue(null),
+          create: jest.fn().mockResolvedValue({}),
+          updateMany: jest.fn(),
+        },
+      };
+      return fn(txMock);
+    });
+
+    await movementService.createMovement({
+      productId: "prod-1",
+      locationId: "loc-1",
+      type: "OUT",
+      quantity: 45,
+    });
+
+    expect(mockNotifyIncident).toHaveBeenCalledTimes(1);
+    expect(mockNotifyIncident).toHaveBeenCalledWith(
+      expect.objectContaining({
+        alertType: "critical_threshold_reached",
+        sku: "SKU-001",
+        locationId: "loc-1",
+        currentStock: 5,
+        minStock: 10,
+      })
+    );
+  });
+
+  it("OUT con stock en 0 llama a notifyIncident con stock_out_error", async () => {
+    mockNotifyIncident.mockClear();
+    prismaMock.product.findUnique.mockResolvedValueOnce(mockProduct as any);
+    prismaMock.location.findUnique.mockResolvedValueOnce(mockLocationOpen as any);
+
+    const updatedStock = { ...mockStock, quantity: 0 };
+    const createdMovement = { ...mockMovement, type: "OUT" as const };
+
+    prismaMock.$transaction.mockImplementationOnce(async (fn: any) => {
+      const txMock = {
+        stock: {
+          findUnique: jest.fn().mockResolvedValue({ ...mockStock, quantity: 50 }),
+          upsert: jest.fn().mockResolvedValue(updatedStock),
+        },
+        movement: { create: jest.fn().mockResolvedValue(createdMovement) },
+        stockAlert: {
+          findFirst: jest.fn().mockResolvedValue(null),
+          create: jest.fn().mockResolvedValue({}),
+          updateMany: jest.fn(),
+        },
+      };
+      return fn(txMock);
+    });
+
+    await movementService.createMovement({
+      productId: "prod-1",
+      locationId: "loc-1",
+      type: "OUT",
+      quantity: 50,
+    });
+
+    expect(mockNotifyIncident).toHaveBeenCalledWith(
+      expect.objectContaining({ alertType: "stock_out_error", currentStock: 0 })
+    );
+  });
+
+  it("OUT que no deja stock crítico NO llama a notifyIncident", async () => {
+    mockNotifyIncident.mockClear();
+    prismaMock.product.findUnique.mockResolvedValueOnce(mockProduct as any);
+    prismaMock.location.findUnique.mockResolvedValueOnce(mockLocationOpen as any);
+
+    const updatedStock = { ...mockStock, quantity: 70 }; // 70 > minStock(10)
+    const createdMovement = { ...mockMovement, type: "IN" as const };
+
+    prismaMock.$transaction.mockImplementationOnce(async (fn: any) => {
+      const txMock = {
+        stock: {
+          findUnique: jest.fn().mockResolvedValue({ ...mockStock, quantity: 80 }),
+          upsert: jest.fn().mockResolvedValue(updatedStock),
+        },
+        movement: { create: jest.fn().mockResolvedValue(createdMovement) },
+        stockAlert: {
+          findFirst: jest.fn(),
+          create: jest.fn(),
+          updateMany: jest.fn().mockResolvedValue({ count: 0 }),
+        },
+      };
+      return fn(txMock);
+    });
+
+    await movementService.createMovement({
+      productId: "prod-1",
+      locationId: "loc-1",
+      type: "IN",
+      quantity: 10,
+    });
+
+    expect(mockNotifyIncident).not.toHaveBeenCalled();
   });
 
   it("IN que supera minStock resuelve alertas PENDING existentes", async () => {

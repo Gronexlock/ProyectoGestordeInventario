@@ -6,6 +6,13 @@ jest.mock("../../services/event.service", () => ({
   emitStockMovement: jest.fn().mockResolvedValue(undefined),
 }));
 
+jest.mock("../../services/incident.service", () => ({
+  notifyIncident: jest.fn(),
+}));
+
+import * as eventService from "../../services/event.service";
+const mockEmitStockMovement = eventService.emitStockMovement as jest.MockedFunction<typeof eventService.emitStockMovement>;
+
 const mockProduct = { id: "prod-1", name: "Test", sku: "SKU-001", minStock: 10, createdAt: new Date(), updatedAt: new Date() };
 const mockLocation = { id: "loc-1", name: "Bodega A", type: "WAREHOUSE", capacity: null, dispatchStart: "08:00", dispatchEnd: "18:00", createdAt: new Date(), updatedAt: new Date() };
 const mockSupplier = { id: "sup-1", name: "Distrib. Central", email: "c@c.com", phone: null, createdAt: new Date() };
@@ -132,6 +139,38 @@ describe("replenishmentService.updateOrderStatus", () => {
 
     await replenishmentService.updateOrderStatus("order-1", "RECEIVED");
     expect(alertUpdateMany).not.toHaveBeenCalled();
+  });
+
+  it("RECEIVED: emitStockMovement incluye locationName y locationType de la ubicación", async () => {
+    mockEmitStockMovement.mockClear();
+    prismaMock.replenishmentOrder.findUnique.mockResolvedValueOnce({
+      ...orderWithProduct,
+      status: "ORDERED",
+      quantity: 50,
+      location: { ...mockLocation, name: "Bodega Central", type: "WAREHOUSE" },
+    } as any);
+
+    prismaMock.$transaction.mockImplementationOnce(async (fn: any) => {
+      const txMock = {
+        stock: { upsert: jest.fn().mockResolvedValue({ quantity: 60 }) },
+        movement: { create: jest.fn().mockResolvedValue({}) },
+        replenishmentOrder: { update: jest.fn().mockResolvedValue({ ...mockOrder, status: "RECEIVED" }) },
+        stockAlert: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
+      };
+      return fn(txMock);
+    });
+
+    await replenishmentService.updateOrderStatus("order-1", "RECEIVED");
+
+    expect(mockEmitStockMovement).toHaveBeenCalledWith(
+      expect.objectContaining({
+        eventType: "stock_received",
+        locationName: "Bodega Central",
+        locationType: "WAREHOUSE",
+        sku: "SKU-001",
+        quantity: 50,
+      })
+    );
   });
 });
 

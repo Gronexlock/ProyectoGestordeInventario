@@ -43,4 +43,7 @@ export const config = {
   eventWorkerIntervalMs: parseInt(process.env.EVENT_WORKER_INTERVAL_MS ?? "30000", 10),
   eventMaxAttempts: parseInt(process.env.EVENT_MAX_ATTEMPTS ?? "5", 10),
   eventRequestTimeoutMs: parseInt(process.env.EVENT_REQUEST_TIMEOUT_MS ?? "10000", 10),
+
+  /** Alertas de incidentes — Grupo 11 Incidentes Operacionales */
+  incidentsUrl: process.env.INCIDENTS_URL ?? "",
 } as const;

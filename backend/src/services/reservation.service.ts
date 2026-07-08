@@ -16,6 +16,7 @@ import {
 import { transitionOrder } from "./order.service";
 import { suggestSourceLocationBySku } from "./stock.service";
 import * as eventService from "./event.service";
+import { notifyIncident } from "./incident.service";
 
 /**
  * Suma de unidades reservadas activas para un SKU en una ubicación.
@@ -473,6 +474,15 @@ export const confirmDelivery = async (
       locationName: result.reservation.location.name,
       locationType: result.reservation.location.type,
       city: result.reservation.location.city ?? undefined,
+    });
+    notifyIncident({
+      alertType: result.newQuantity === 0 ? "stock_out_error" : "critical_threshold_reached",
+      sku: product.sku,
+      locationId: reservation.locationId,
+      locationName: result.reservation.location.name,
+      currentStock: result.newQuantity,
+      minStock: product.minStock,
+      productName: product.name,
     });
   }
 

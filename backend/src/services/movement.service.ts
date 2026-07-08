@@ -7,6 +7,7 @@ import { CreateMovementDto, MovementResult } from "../utils/types";
 import { AppError } from "../utils/AppError";
 import { logger } from "../config/logger";
 import * as eventService from "./event.service";
+import { notifyIncident } from "./incident.service";
 
 /**
  * Registra un movimiento de inventario (entrada o salida) y
@@ -204,6 +205,15 @@ export const createMovement = async (
       locationName: location.name,
       locationType: location.type,
       city: location.city ?? undefined,
+    });
+    notifyIncident({
+      alertType: result.newQuantity === 0 ? "stock_out_error" : "critical_threshold_reached",
+      sku: product.sku,
+      locationId: dto.locationId,
+      locationName: location.name,
+      currentStock: result.newQuantity,
+      minStock: product.minStock,
+      productName: product.name,
     });
   }
 
@@ -430,6 +440,15 @@ export const createTransfer = async (dto: {
         locationName: sourceLoc.name,
         locationType: sourceLoc.type,
         city: sourceLoc.city ?? undefined,
+      });
+      notifyIncident({
+        alertType: result.newSourceQty === 0 ? "stock_out_error" : "critical_threshold_reached",
+        sku: product.sku,
+        locationId: dto.sourceLocationId,
+        locationName: sourceLoc.name,
+        currentStock: result.newSourceQty,
+        minStock: product.minStock,
+        productName: product.name,
       });
     }
 

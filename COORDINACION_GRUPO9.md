@@ -1,7 +1,7 @@
 # Coordinación integración Inventario (Grupo 5) → Analítica (Grupo 9)
 
-> **Estado actual: ✅ CONTRATO CERRADO — pendiente ajuste de autenticación**
-> Última actualización: 2026-06-30
+> **Estado actual: ✅ IMPLEMENTACIÓN COMPLETA — pendiente validación conjunta con Grupo 9**
+> Última actualización: 2026-07-08
 
 ---
 
@@ -28,34 +28,10 @@ Nuestro sistema ya cubre stock, movimientos, alertas y reservas. Lo que nos falt
 |----------|-----------|
 | **URL base de eventos** | `https://analisis-proyecto-ti.onrender.com/v1/events` (POST) |
 | **Autenticación para eventos** | No requerida para POST /events |
-| **Autenticación para consultar endpoints** | Sí — requiere token **Keycloak** (ver §Keycloak abajo) |
 | **Entorno de pruebas** | La URL es producción/staging compartida. Coordinar si se necesita entorno aislado |
 | **Reintentos / Timeout** | Nuestro outbox worker ya maneja: backoff exponencial, no reintenta en 4xx, sí reintenta en 5xx o falla de red |
 
-#### 🔑 Keycloak — Obtener token para consultar endpoints del Grupo 9
-
-```bash
-curl -X POST "https://underarm-those-stardust.ngrok-free.dev/realms/sistema-centralizado/protocol/openid-connect/token" \
-  -H "Content-Type: application/x-www-form-urlencoded" \
-  -d "grant_type=password" \
-  -d "client_id=p9" \
-  -d "username=inventario@ucn.cl" \
-  -d "password=Inv123!"
-```
-
-Del response, usar el valor de `access_token` como `Authorization: Bearer <access_token>`.
-
-#### 📡 Endpoints del Grupo 9 que podemos consumir
-
-| Endpoint | Descripción | Auth |
-|----------|-------------|------|
-| `GET /v1/inventory/kpis` | KPIs generales | Bearer token |
-| `GET /v1/inventory/snapshot` | Snapshot de stock por ubicación | Bearer token |
-| `GET /v1/inventory/products/thresholds?below_threshold=true` | Productos bajo umbral crítico | Bearer token |
-| `GET /v1/inventory/stock-status` | Estado del stock (NORMAL / CRITICAL / OUT_OF_STOCK) | Bearer token |
-| `GET /v1/inventory/locations/catalog` | Catálogo de ubicaciones | Bearer token |
-
-Base URL: `https://analisis-proyecto-ti.onrender.com`
+> **Alcance de la integración:** el Grupo 5 **solo emite eventos** hacia el Grupo 9 (`POST /v1/events`). No consumimos ningún endpoint de su API. La autenticación Keycloak no aplica a nuestro lado.
 
 #### ⚙️ Variable de entorno requerida
 
@@ -146,7 +122,7 @@ El validador acepta campos adicionales en el `payload` sin romper la validación
 
 Incluir `unit_price` en los eventos de stock. Mínimo en `stock_received`. Si también está en reservas/despachos, está bien — el Grupo 9 guarda el último valor conocido.
 
-> **Pendiente nuestro:** agregar `unit_price` al emitir `emitStockMovement()` en `event.service.ts`.
+> ~~**Pendiente nuestro:** agregar `unit_price` al emitir `emitStockMovement()` en `event.service.ts`.~~ ✅ Implementado en `movement.service.ts`, `reservation.service.ts` y `replenishment.service.ts`.
 
 ---
 
@@ -176,7 +152,7 @@ Los campos `location_name`, `location_type`, `city` y `address` son aceptados.
 - El Grupo 9 hace **upsert**: enviarlo una vez queda guardado
 - `location_type` acepta: `WAREHOUSE`, `DISTRIBUTION_CENTER`, `RETAIL_POINT`
 
-> **Pendiente nuestro:** agregar `city` y `threshold_limite` al `emitCriticalThreshold()` en `event.service.ts`.
+> ~~**Pendiente nuestro:** agregar `city` y `threshold_limite` al `emitCriticalThreshold()` en `event.service.ts`.~~ ✅ Implementado en `movement.service.ts` y `reservation.service.ts`.
 
 ---
 
@@ -192,7 +168,7 @@ Los campos `location_name`, `location_type`, `city` y `address` son aceptados.
 
 Incluir `product_name`, `category`, `unit` en cada `stock_received`. El Grupo 9 guarda el último valor conocido.
 
-> **Pendiente nuestro:** agregar `category` y `unit` al payload de `emitStockMovement()`.
+> ~~**Pendiente nuestro:** agregar `category` y `unit` al payload de `emitStockMovement()`.~~ ✅ Implementado en `movement.service.ts`, `reservation.service.ts` y `replenishment.service.ts`.
 
 ---
 
@@ -209,14 +185,16 @@ Incluir `product_name`, `category`, `unit` en cada `stock_received`. El Grupo 9 
 
 ## 8. Validación conjunta
 
-Cuando tengamos el primer entorno conectado, validar juntos:
+> **Nota:** el Grupo 5 solo emite eventos, no consulta endpoints del Grupo 9. La validación de que los datos llegaron correctamente la realiza el **Grupo 9 desde su lado**. Nosotros confirmamos que los eventos salen correctamente desde nuestra cola outbox.
 
-- [ ] `GET /v1/inventory/kpis` → `total_stock_value` ≠ 0
-- [ ] `GET /v1/inventory/snapshot` → `reserved_stock` correcto tras crear/cancelar reserva
-- [ ] `GET /v1/inventory/products/thresholds` → nombres y categorías reales
-- [ ] `GET /v1/inventory/locations/catalog` → `city` y `location_type` poblados
+Cuando tengamos el entorno conectado, verificar desde nuestro lado:
 
-¿Les parece bien una sesión corta de prueba cuando tengamos el emisor de eventos listo?
+- [ ] Cola outbox: eventos pasan de `PENDING` a `SENT` (no quedan en `FAILED` ni `DEAD`)
+- [ ] Evento `stock_received` incluye `unit_price`, `product_name`, `category`, `unit`
+- [ ] Evento `stock_dispatched` con `order_id` cuando viene de una reserva
+- [ ] Evento `critical_threshold_reached` incluye `city`, `threshold_limite`, `location_name`, `location_type`
+
+El Grupo 9 confirma por su lado que los KPIs y el snapshot reflejan los datos enviados.
 
 ---
 
@@ -253,8 +231,8 @@ GET http://localhost:3000/api/v1/events/outbox
 - El estado (`status`) de los eventos debe cambiar de `PENDING` a `SENT` tras unos segundos.
 - Si ocurre algún error en la conexión o validación del payload, el estado cambiará a `FAILED` o `DEAD`, mostrando el error detallado en `lastError`.
 
-### Paso 5: Confirmar en Analítica
-Usa el token Keycloak detallado en la **Sección 1** para consultar los endpoints del Grupo 9 y validar que los datos enviados impactaron su base de datos.
+### Paso 5: Confirmar que los eventos llegaron
+Una vez que los eventos pasen a `SENT` en la cola outbox, coordinar con el Grupo 9 para que validen que los datos impactaron su base de datos correctamente. La verificación final es responsabilidad de su lado.
 
 ---
 

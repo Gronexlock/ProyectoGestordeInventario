@@ -112,6 +112,8 @@ export const updateOrderStatus = async (id: string, status: string) => {
         category: order.product.category ?? undefined,
         unit: order.product.unit ?? undefined,
         productName: order.product.name,
+        locationName: order.location.name,
+        locationType: order.location.type,
         movementId: undefined,
         receivedAt: new Date().toISOString(),
       });

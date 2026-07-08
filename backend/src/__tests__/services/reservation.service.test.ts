@@ -6,6 +6,9 @@ import { AppError } from "../../utils/AppError";
 jest.mock("../../services/order.service");
 jest.mock("../../services/stock.service");
 jest.mock("../../services/event.service");
+jest.mock("../../services/incident.service", () => ({
+  notifyIncident: jest.fn(),
+}));
 
 import * as stockService from "../../services/stock.service";
 import * as eventService from "../../services/event.service";
